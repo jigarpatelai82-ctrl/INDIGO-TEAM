@@ -1,0 +1,6 @@
+{
+  "name": "INDIGO TEAM",
+  "description": "Multi-user internal team management platform with leaves, timesheets, tasks, projects, budgets, and performance reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

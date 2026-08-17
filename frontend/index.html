@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>INDIGO TEAM — Operations & Team Management</title>
+  <style>
+    :root {
+      --primary: #3b49df;
+      --primary-hover: #2f3ab2;
+      --primary-soft: #eef2ff;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --border-dark: #cbd5e1;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --text-light: #94a3b8;
+      
+      --danger: #dc2626;
+      --danger-soft: #fef2f2;
+      --danger-soft-text: #991b1b;
+      
+      --warning: #d97706;
+      --warning-soft: #fffbeb;
+      --warning-soft-text: #92400e;
+      
+      --success: #16a34a;
+      --success-soft: #f0fdf4;
+      --success-soft-text: #166534;
+      
+      --radius: 8px;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+
+    .hidden { display: none !important; }
+
+    /* Buttons */
+    button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 7px 14px; font-size: 13px; font-weight: 500; border-radius: var(--radius);
+      border: 1px solid var(--border-dark); background: var(--surface); color: var(--text);
+      cursor: pointer; transition: all 0.15s ease; white-space: nowrap;
+    }
+    button:hover { background: #f1f5f9; border-color: #94a3b8; }
+    button.primary { background: var(--primary); color: #ffffff; border-color: var(--primary); }
+    button.primary:hover { background: var(--primary-hover); }
+    button.danger { background: #fee2e2; color: var(--danger); border-color: #fca5a5; }
+    button.danger:hover { background: #fecaca; }
+
+    /* Top Navigation Bar */
+    header.topbar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      position: sticky; top: 0; z-index: 40; box-shadow: var(--shadow-sm);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; color: var(--primary); }
+    .brand-badge { background: var(--primary-soft); color: var(--primary); font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+
+    .globalsearch { position: relative; width: 320px; }
+    .globalsearch input {
+      width: 100%; padding: 7px 12px 7px 32px; border-radius: 20px;
+      border: 1px solid var(--border); background: #f8fafc; font-size: 13px; outline: none;
+    }
+    .globalsearch input:focus { border-color: var(--primary); background: #fff; box-shadow: 0 0 0 2px var(--primary-soft); }
+    .globalsearch-icon { position: absolute; left: 10px; top: 8px; font-size: 12px; color: var(--text-muted); }
+    
+    .gs-results {
+      position: absolute; top: calc(100% + 6px); left: 0; width: 380px; max-height: 400px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow-md); overflow-y: auto; z-index: 50; padding: 8px;
+    }
+    .gs-group { margin-bottom: 8px; }
+    .gs-group-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding: 4px 8px; }
+    .gs-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .gs-item:hover { background: var(--primary-soft); }
+    .gs-icon { font-size: 14px; }
+    .gs-main { font-weight: 600; color: var(--text); }
+    .gs-sub { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+    .gs-empty { padding: 12px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+    .user-nav { display: flex; align-items: center; gap: 12px; }
+    .notif-btn { position: relative; padding: 6px 10px; border-radius: var(--radius); }
+    .notif-badge { position: absolute; top: -4px; right: -4px; background: var(--danger); color: white; border-radius: 10px; font-size: 10px; font-weight: 700; padding: 1px 5px; min-width: 16px; text-align: center; }
+
+    /* Page container & Tabs */
+    .container { max-width: 1440px; margin: 0 auto; padding: 20px; }
+    
+    .page-header { margin-bottom: 16px; }
+    .page-header h2 { font-size: 22px; font-weight: 700; color: var(--text); }
+    .page-header p { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+    .tabs-bar {
+      display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .tabs-bar button {
+      background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+      padding: 8px 14px; font-size: 13px; font-weight: 500; color: var(--text-muted);
+    }
+    .tabs-bar button:hover { background: transparent; color: var(--text); border-bottom-color: var(--border-dark); }
+    .tabs-bar button.active { color: var(--primary); font-weight: 600; border-bottom-color: var(--primary); background: transparent; }
+
+    /* Toolbar & Filters */
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    
+    select, input[type="text"], input[type="number"], input[type="date"], input[type="password"], textarea {
+      padding: 7px 10px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--surface); color: var(--text); outline: none;
+    }
+    select:focus, input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+
+    /* Tables */
+    .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; }
+    .table-wrap { overflow-x: auto; width: 100%; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+    th { background: #f8fafc; font-weight: 600; color: var(--text-muted); padding: 10px 14px; border-bottom: 1px solid var(--border); border-top: 1px solid var(--border); white-space: nowrap; }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+    tr:hover td { background: #f8fafc; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { color: var(--primary); }
+    th .arrow { font-size: 10px; margin-left: 4px; }
+
+    /* Status Pill / Badges */
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 12px; }
+    .badge-admin { background: #e0e7ff; color: #3730a3; }
+    .badge-employee { background: #f1f5f9; color: #475569; }
+    .badge-active { background: var(--success-soft); color: var(--success-soft-text); }
+    .badge-inactive { background: #f1f5f9; color: var(--text-muted); }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .impHigh { background: #fee2e2; color: #991b1b; }
+    .impMedium { background: #fef3c7; color: #92400e; }
+    .impLow { background: #f1f5f9; color: #475569; }
+
+    /* Table Utilization Colors */
+    tr.red td { background: #fff5f5; }
+    tr.yellow td { background: #fffbeb; }
+    tr.green td { background: #f0fdf4; }
+
+    /* Task Card */
+    .taskcard {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px; margin-bottom: 10px; box-shadow: var(--shadow-sm);
+    }
+    .taskcard.prio1 { border-left: 4px solid var(--danger); }
+    .taskcard.prio2 { border-left: 4px solid var(--warning); }
+    .taskcard.prio3 { border-left: 4px solid #3b82f6; }
+    .taskcard .meta { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); margin: 6px 0 10px 0; flex-wrap: wrap; }
+    .taskcard .small { font-size: 12px; color: var(--text-muted); }
+
+    /* Stat Cards */
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+    .card b { display: block; font-size: 26px; font-weight: 700; color: var(--text); margin: 4px 0; }
+    .card-icon { font-size: 20px; margin-bottom: 4px; }
+    
+    .statbox-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+    .statbox { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; text-align: center; }
+    .statbox .n { display: block; font-size: 20px; font-weight: 700; color: var(--text); }
+    .statbox .l { font-size: 11px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; }
+
+    /* Progress bar */
+    .barchart { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+    .barrow { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .barlabel { width: 90px; font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+    .bartrack { flex: 1; height: 16px; background: #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .barfill { height: 100%; border-radius: 8px; }
+    .barfill.green { background: #22c55e; }
+    .barfill.yellow { background: #eab308; }
+    .barfill.red { background: #ef4444; }
+    .barpct { width: 45px; text-align: right; font-weight: 600; }
+
+    /* Calendar Grid */
+    #calendar { width: 100%; border-collapse: separate; border-spacing: 0; }
+    #calendar th { text-align: center; padding: 6px 2px; font-size: 11px; min-width: 38px; border: 1px solid var(--border); }
+    #calendar th.name { min-width: 140px; text-align: left; padding-left: 8px; }
+    #calendar th.holidayhead { background: #fee2e2; color: #991b1b; }
+    #calendar td { border: 1px solid var(--border); padding: 4px; text-align: center; font-size: 11px; height: 48px; min-width: 38px; cursor: pointer; }
+    #calendar td.name { text-align: left; padding: 6px 8px; font-weight: 600; background: #f8fafc; }
+    #calendar td.weekend { background: #f1f5f9; color: #94a3b8; }
+    #calendar td.holiday { background: #fee2e2; color: #991b1b; font-size: 9px; line-height: 1.1; }
+    #calendar td.leave { background: #ffedd5; color: #9a3412; }
+    #calendar td.tentative { background: #fef3c7; color: #854d0e; }
+    #calendar td.half { background: #e0e7ff; color: #3730a3; }
+    #calendar td.wfh { background: #dbeafe; color: #1e40af; }
+    #calendar td.official { background: #f3e8ff; color: #6b21a8; }
+    #calendar td.complete { background: #dcfce7; }
+    #calendar td.under { background: #fef9c3; }
+    #calendar td.over { background: #fee2e2; }
+    #calendar .entry { display: block; font-size: 10px; font-weight: 600; line-height: 1.1; margin-bottom: 2px; }
+    #calendar .total { display: block; font-size: 9px; color: var(--text-muted); }
+    #calendar .extra { display: inline-block; color: var(--danger); font-weight: bold; margin-left: 2px; }
+
+    /* Modals / Dialogs */
+    dialog {
+      border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+      padding: 24px; max-width: 540px; width: 92%; margin: auto; background: var(--surface);
+    }
+    dialog::backdrop { background: rgba(15, 23, 42, 0.5); }
+    dialog h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; color: var(--text); }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; }
+    .form-row { display: flex; gap: 10px; }
+    .form-row .form-group { flex: 1; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+    .error-msg { color: var(--danger); background: var(--danger-soft); padding: 8px 12px; border-radius: var(--radius); font-size: 12px; margin-bottom: 12px; }
+
+    /* Timesheet row entry inside dialog */
+    .tsrow { background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; margin-bottom: 8px; }
+    .tsrow-top { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .tsrow-top select { flex: 1; }
+    .tsrow-top input { width: 80px; }
+    .tsrow-sub { display: flex; gap: 8px; }
+    .tsrow-sub select { width: 160px; }
+    .tsrow-sub input { flex: 1; }
+
+    /* Login Screen */
+    .login-box {
+      max-width: 380px; margin: 100px auto; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 32px; box-shadow: var(--shadow-md); text-align: center;
+    }
+    .login-box h1 { font-size: 22px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+    .login-box p { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN SCREEN -->
+  <div id="loginScreen" class="hidden">
+    <div class="login-box">
+      <h1>INDIGO TEAM</h1>
+      <p>Operations & Timesheet Portal</p>
+      <div id="loginErr" class="error-msg hidden"></div>
+      <div class="form-group" style="text-align: left;">
+        <label>Username</label>
+        <input type="text" id="loginUser" placeholder="Enter username" autofocus onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <div class="form-group" style="text-align: left;">
+        <label>Password</label>
+        <input type="password" id="loginPass" placeholder="Enter password" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="primary" style="width: 100%; margin-top: 10px;" onclick="doLogin()">Log In</button>
+    </div>
+  </div>
+
+  <!-- APPLICATION ROOT -->
+  <div id="appRoot" class="hidden">
+    <!-- Topbar Navigation -->
+    <header class="topbar">
+      <div class="brand">
+        <span>INDIGO TEAM</span>
+        <span class="brand-badge">PROD</span>
+      </div>
+
+      <div class="globalsearch">
+        <span class="globalsearch-icon">🔍</span>
+        <input type="text" id="globalSearchInput" placeholder="Search projects, clients, tasks..." oninput="onGlobalSearch(this.value)">
+        <div id="globalSearchResults" class="gs-results hidden"></div>
+      </div>
+
+      <div class="user-nav">
+        <button class="notif-btn" onclick="tab('myday')" title="Notifications">
+          🔔 <span id="notifCount" class="notif-badge hidden">0</span>
+        </button>
+        <span id="whoami" style="font-weight: 600; font-size: 13px;">User</span>
+        <button onclick="openChangePw(false)" title="Change Password">🔑</button>
+        <button onclick="logout()">Log Out</button>
+      </div>
+    </header>
+
+    <div class="container">
+      <div class="page-header">
+        <h2 id="pageHeadTitle">My Day</h2>
+        <p id="pageHeadSubtitle">Your tasks and today's timesheet at a glance.</p>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="tabs-bar" id="mainTabs"></div>
+
+      <!-- TAB: MY DAY -->
+      <section id="tab-myday" class="hidden">
+        <div class="toolbar">
+          <h3 id="mydayHeading" style="font-size: 16px; font-weight: 600;">Today</h3>
+          <button id="mydayLogBtn" class="primary hidden">Log Today's Hours</button>
+        </div>
+        <div id="mydayOverdue" style="margin-bottom: 20px;"></div>
+        <div id="mydayTasks"></div>
+      </section>
+
+      <!-- TAB: WHOLE MONTH CALENDAR -->
+      <section id="tab-cal" class="hidden">
+        <div class="toolbar" id="calToolbar"></div>
+        <div class="table-card">
+          <div class="table-wrap">
+            <table id="calendar"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: PROJECTS & BUDGETS -->
+      <section id="tab-projects" class="hidden">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <button class="primary" onclick="openProject()">+ Add Project</button>
+            <button onclick="editRates()">Edit Hourly Rates</button>
+          </div>
+          <div class="toolbar-right">
+            <button onclick="exportProjects('csv')">Export CSV</button>
+            <button onclick="exportProjects('pdf')">Export PDF</button>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-wrap">
+            <table id="projectTable"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: MONTHLY SUMMARY -->
+      <section id="tab-summary" class="hidden">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <h3 id="chartMonthLabel" style="font-weight: 600;"></h3>
+          </div>
+          <div class="toolbar-right">
+            <button onclick="exportSummary('csv')">Export CSV</button>
+            <button onclick="exportSummary('pdf')">Export PDF</button>
+          </div>
+        </div>
+        <div class="card-grid" id="cards"></div>
+        <div class="table-card" style="padding: 16px; margin-bottom: 20px;">
+          <h4 style="font-weight: 600; margin-bottom: 10px;">Project Manhour Utilization</h4>
+          <div id="summaryChart"></div>
+        </div>
+        <div class="table-card">
+          <div class="table-wrap">
+            <table id="summaryTable"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: TASKS -->
+      <section id="tab-tasks" class="hidden">
+        <div class="toolbar" id="taskToolbar"></div>
+        <div id="taskList"></div>
+      </section>
+
+      <!-- TAB: EMPLOYEE PERFORMANCE -->
+      <section id="tab-performance" class="hidden">
+        <div class="table-card">
+          <div class="table-wrap">
+            <table id="performanceTable"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: TEAM MANAGEMENT -->
+      <section id="tab-team" class="hidden">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <input type="text" id="newName" placeholder="New member name..." onkeydown="if(event.key==='Enter')addMember()">
+            <button class="primary" onclick="addMember()">+ Add Member</button>
+          </div>
+          <div class="toolbar-right">
+            <button onclick="exportTeam('csv')">Export CSV</button>
+            <button onclick="exportTeam('pdf')">Export PDF</button>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-wrap">
+            <table id="teamTable"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: CLIENTS -->
+      <section id="tab-clients" class="hidden">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <button class="primary" onclick="openClient()">+ Add Client</button>
+          </div>
+          <div class="toolbar-right">
+            <button onclick="exportClients('csv')">Export CSV</button>
+            <button onclick="exportClients('pdf')">Export PDF</button>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-wrap">
+            <table id="clientTable"></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: ACCESS / LOGINS -->
+      <section id="tab-users" class="hidden">
+        <div class="statbox-grid" id="userStats"></div>
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <input type="text" id="userSearch" placeholder="Search logins..." oninput="renderUsers()">
+            <button class="primary" onclick="openUserDlg(null)">+ Grant User Access</button>
+          </div>
+          <div class="toolbar-right">
+            <button onclick="exportUsers('csv')">Export CSV</button>
+            <button onclick="exportUsers('pdf')">Export PDF</button>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-wrap">
+            <table id="userTable"></table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- MODAL DIALOGS -->
+
+  <!-- Timesheet Entry Dialog -->
+  <dialog id="timeDlg">
+    <h3 id="timeTitle">Log Daily Hours</h3>
+    <input type="hidden" id="tm">
+    <input type="hidden" id="td">
+    <div id="timeErr" class="error-msg hidden"></div>
+    <div id="rows"></div>
+    <button type="button" style="margin: 8px 0 16px 0;" onclick="addRow()">+ Add Project Row</button>
+    <div id="dayTotal" style="font-weight: 700; margin-bottom: 12px;">Total: 0 / 9 hrs</div>
+    <div id="extraArea" class="form-group hidden">
+      <label style="color: var(--danger);">Overtime Remark (Required for &gt;9 hrs):</label>
+      <input type="text" id="extraRemark" placeholder="Reason for extra hours...">
+    </div>
+    <div class="dialog-actions">
+      <button type="button" onclick="timeDlg.close()">Cancel</button>
+      <button type="button" class="primary" onclick="saveTime()">Save Timesheet</button>
+    </div>
+  </dialog>
+
+  <!-- Leave Booking Dialog -->
+  <dialog id="leaveDlg">
+    <h3>Book Leave / Absence</h3>
+    <div id="leaveErr" class="error-msg hidden"></div>
+    <div class="form-group">
+      <label>Team Member</label>
+      <select id="lm"></select>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>From Date</label>
+        <input type="date" id="lf">
+      </div>
+      <div class="form-group">
+        <label>To Date</label>
+        <input type="date" id="lt">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Status / Leave Type</label>
+      <select id="ls">
+        <option value="Leave">Leave</option>
+        <option value="Half-Day">Half-Day</option>
+        <option value="WFH">Work From Home (WFH)</option>
+        <option value="Official">Official / Site Visit</option>
+        <option value="Tentative">Tentative</option>
+        <option value="Working-Day">Clear Leave / Working Day</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Remarks</label>
+      <input type="text" id="lr" placeholder="Optional notes...">
+    </div>
+    <div class="dialog-actions">
+      <button type="button" onclick="leaveDlg.close()">Cancel</button>
+      <button type="button" class="primary" onclick="saveLeave()">Save</button>
+    </div>
+  </dialog>
+
+  <!-- Holiday Dialog -->
+  <dialog id="holidayDlg">
+    <h3>Manage Holiday</h3>
+    <input type="hidden" id="holidayDate">
+    <div class="form-group">
+      <label>Date</label>
+      <input type="text" id="holidayDateDisplay" readonly>
+    </div>
+    <div class="form-group">
+      <label>Holiday Name</label>
+      <input type="text" id="holidayName" placeholder="e.g. Diwali, Independence Day">
+    </div>
+    <div class="form-group">
+      <label>Remarks</label>
+      <input type="text" id="holidayRemarks" placeholder="Optional...">
+    </div>
+    <div class="dialog-actions">
+      <button type="button" id="removeHolidayBtn" class="danger" onclick="removeHoliday()">Delete</button>
+      <button type="button" onclick="holidayDlg.close()">Cancel</button>
+      <button type="button" class="primary" onclick="saveHoliday()">Save Holiday</button>
+    </div>
+  </dialog>
+
+  <!-- Project Dialog -->
+  <dialog id="projectDlg" style="max-width: 600px;">
+    <h3>Project Details & Allocation</h3>
+    <input type="hidden" id="pi">
+    <div id="projErr" class="error-msg hidden"></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Project No. *</label>
+        <input type="text" id="pno" placeholder="e.g. 2026-01">
+      </div>
+      <div class="form-group">
+        <label>Abbreviation *</label>
+        <input type="text" id="pabbr" placeholder="e.g. PRJ">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Project Name *</label>
+      <input type="text" id="pname" placeholder="Full descriptive project name">
+    </div>
+    <div class="form-group">
+      <label>Client</label>
+      <select id="pclient"></select>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Project Fee (₹)</label>
+        <input type="number" id="pfee" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>Manual Hours Override</label>
+        <input type="number" id="pmanual" placeholder="0">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Assigned Team Members</label>
+      <div id="projectMembers" style="max-height: 130px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;"></div>
+    </div>
+    <div class="form-group">
+      <label>Remarks</label>
+      <input type="text" id="prem" placeholder="Notes...">
+    </div>
+    <div class="dialog-actions">
+      <button type="button" onclick="projectDlg.close()">Cancel</button>
+      <button type="button" class="primary" onclick="saveProject()">Save Project</button>
+    </div>
+  </dialog>
+
+  <!-- Client Dialog -->
+  <dialog id="clientDlg">
+    <h3>Client Organization</h3>
+    <input type="hidden" id="ci">
+    <div id="clientErr" class="error-msg hidden"></div>
+    <div class="form-group">
+      <label>Client Name *</label>
+      <input type="text" id="cname">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Contact Person</label>
+        <input type="text" id="ccontact">
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="text" id="cphone">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="text" id="cemail">
+    </div>
+    <div class="form-group">
+      <label>Address</label>
+      <input type="text" id="caddress">
+    </div>
+    <div class="form-group">
+      <label>Remarks</label>
+      <input type="text" id="cremarks">
+    </div>
+    <div class="dialog-actions">
+      <button type="button" onclick="clientDlg.close()">Cancel</button>
+      <button type="button" class="primary" onclick="saveClient()">Save Client</button>
+    </div>
+  </dialog>
+
+  <!-- Hourly Rate Dialog -->
+  <dialog id="rateDlg">
+    <h3>Hourly Manhour Billing Rates</h3>
+    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">Used for calculating available project hours and internal labour cost.</p>
+    <div id="rateRows" style="max-height: 280px; overflow-y: auto;"></div>
+    <div class="dialog-actions">
+      <button type="button" onclick="rateDlg.close()">Cancel</button>
+      <button type="button" class="primary" onclick="saveRates()">Save Rates</button>
+    </div>
+  </dialog>
+
+  <!-- Task Assignment Dialog -->
+  <dialog id="taskDlg">
+    <h3 id="taskDlgTitle">Assign Task</h3>
+    <input type="hidden" id="taskId">
+    <div id="taskErr" class="error-msg hidden"></div>
+    <div class="form-group">
+      <label>Task Title *</label>
+      <input type="text" id="tTitle" placeholder="Task summary">
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="tDesc" rows="2" placeholder="Task requirements..."></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Assigned To *</label>
+        <select id="tMember"></select>
+      </div>
+      <div class="form-group">
+        <label>Project</label>
+        <select id="tProject"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Priority</label>
+        <select id="tPriority">
+          <option value="1">1 — High</option>
+          <option value="2">2 — Medium</option>
+          <option value="3">3 — Low</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Importance</label>
+        <select id="tImportance">
+          <option value="High">High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Estimated Hours</label>
+        <input type="number" id="tEst" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>Due Date</label>
+        <input type="date" id="tDue">
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" onclick="taskDlg.close()">Cancel</button>
+      <button type="button" class="primary" onclick="saveTask()">Save Task</button>
+    </div>
+  </dialog>
+
+  <!-- User Account Dialog -->
+  <dialog id="userDlg">
+    <h3>User Account Access</h3>
+    <input type="hidden" id="userId">
+    <div id="userErr" class="error-msg hidden"></div>
+    <div class="form-group">
+      <label>Username *</label>
+      <input type="text" id="uUsername">
+    </div>
+    <div class="form-group">
+      <label>Password <span id="uPwHint" style="font-weight: normal; color: var(--text-muted);"></span></label>
+      <input type="password" id="uPassword">
+    </div>
+    <div class="form-group">
+      <label>Notification Email</label>
+      <input type="text" id="uEmail" placeholder="user@company.com">
+    </div>
+    <div class="form-group">
+      <label>System Role</label>
+      <select id="uRole" onchange="toggleUserMember()">
+        <option value="employee">Employee (Restricted to own node)</option>
+        <option value="admin">Administrator (Full access)</option>
+      </select>
+    </div>
+    <div class="form-group" id="uMemberWrap">
+      <label>Linked Team Member *</label>
+      <select id="uMember"></select>
+    </div>
+    <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+      <input type="checkbox" id="uActive" checked>
+      <label for="uActive" style="margin: 0; cursor: pointer;">Account Active</label>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" onclick="userDlg.close()">Cancel</button>
+      <button type="button" class="primary" onclick="saveUser()">Save Account</button>
+    </div>
+  </dialog>
+
+  <!-- Change Password Dialog -->
+  <dialog id="pwDlg">
+    <h3>Change Password</h3>
+    <div id="pwErr" class="error-msg hidden"></div>
+    <div class="form-group">
+      <label>Current Password</label>
+      <input type="password" id="pwCurrent">
+    </div>
+    <div class="form-group">
+      <label>New Password (min 4 chars)</label>
+      <input type="password" id="pwNew">
+    </div>
+    <div class="dialog-actions">
+      <button type="button" onclick="pwDlg.close()">Cancel</button>
+      <button type="button" class="primary" onclick="savePassword()">Update Password</button>
+    </div>
+  </dialog>
+
+  <!-- Load Frontend Application Logic -->
+  <script src="/app.js"></script>
+</body>
+</html>
