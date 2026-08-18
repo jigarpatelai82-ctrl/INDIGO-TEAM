@@ -148,9 +148,6 @@ router.post("/users", authRequired, adminOnly, async (req, res) => {
   if (!["admin", "employee"].includes(role)) {
     return res.status(400).json({ error: "Role must be 'admin' or 'employee'" });
   }
-  if (role === "employee" && !member_id) {
-    return res.status(400).json({ error: "Employee accounts must be linked to a team member" });
-  }
 
   const hash = bcrypt.hashSync(password, 10);
   try {

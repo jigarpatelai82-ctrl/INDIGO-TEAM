@@ -261,7 +261,10 @@ const isAdmin = () => ME && ME.role === "admin";
 async function boot() {
   document.getElementById("loginScreen").classList.add("hidden");
   document.getElementById("appRoot").classList.remove("hidden");
-  document.getElementById("whoami").textContent = ME.member_name || ME.username;
+  const displayName = ME.member_name || ME.username;
+  document.getElementById("whoami").textContent = displayName;
+  const avatarEl = document.getElementById("userAvatar");
+  if (avatarEl) avatarEl.textContent = (displayName || "U").slice(0, 1).toUpperCase();
   buildTabs();
   await loadMembers();
   await loadProjects();
@@ -1127,10 +1130,10 @@ async function renderUsers() {
     disabled = total - active;
 
   document.getElementById("userStats").innerHTML = `
-    <div class="statbox"><span class="n">${total}</span><span class="l">Total Users</span></div>
-    <div class="statbox"><span class="n">${active}</span><span class="l">Active</span></div>
-    <div class="statbox"><span class="n">${admins}</span><span class="l">Administrators</span></div>
-    <div class="statbox"><span class="n">${disabled}</span><span class="l">Disabled</span></div>`;
+    <div class="statbox"><div class="statbox-top"><span class="l">Total Users</span></div><span class="n">${total}</span></div>
+    <div class="statbox"><div class="statbox-top"><span class="l">Active</span></div><span class="n" style="color:var(--success);">${active}</span></div>
+    <div class="statbox"><div class="statbox-top"><span class="l">Administrators</span></div><span class="n" style="color:var(--primary);">${admins}</span></div>
+    <div class="statbox"><div class="statbox-top"><span class="l">Disabled</span></div><span class="n" style="color:var(--text-muted);">${disabled}</span></div>`;
 
   const q = (document.getElementById("userSearch")?.value || "").toLowerCase().trim();
   const filtered = q
@@ -1141,12 +1144,12 @@ async function renderUsers() {
   document.getElementById("userTable").innerHTML = `
     <tr>${sortTh("users","username","Username")}${sortTh("users","role","Role")}${sortTh("users","member_name","Linked Member")}${sortTh("users","active","Status")}<th></th></tr>
     ${users.length ? users.map((u) => `<tr>
-      <td>👤 ${E(u.username)}</td>
+      <td><b>👤 ${E(u.username)}</b>${u.email ? `<div class="small" style="color:var(--text-muted);font-size:11.5px">${E(u.email)}</div>` : ""}</td>
       <td><span class="badge ${u.role === "admin" ? "badge-admin" : "badge-employee"}">${u.role === "admin" ? "Administrator" : "Employee"}</span></td>
-      <td>${E(u.member_name || "—")}</td>
+      <td>${u.member_name ? `<span style="font-weight:600">${E(u.member_name)}</span>` : `<span style="color:var(--text-light);font-style:italic">— None (Unlinked) —</span>`}</td>
       <td><span class="badge ${u.active ? "badge-active" : "badge-inactive"}"><span class="badge-dot"></span>${u.active ? "Active" : "Disabled"}</span></td>
-      <td><button onclick='openUserDlg(${JSON.stringify(u).replace(/'/g, "&#39;")})'>✏ Edit</button>
-      ${u.active ? `<button class="danger" onclick="disableUser(${u.id})">Disable</button>` : ""}</td>
+      <td><div style="display:flex;gap:6px"><button class="btn-sm" onclick='openUserDlg(${JSON.stringify(u).replace(/'/g, "&#39;")})'>✏ Edit</button>
+      ${u.active ? `<button class="danger btn-sm" onclick="disableUser(${u.id})">Disable</button>` : ""}</div></td>
     </tr>`).join("") : `<tr><td colspan="5"><p class="small" style="padding:14px 0">No users match "${E(q)}".</p></td></tr>`}`;
 }
 
@@ -1160,7 +1163,7 @@ function exportUsers(fmt) {
 }
 
 function toggleUserMember() {
-  document.getElementById("uMemberWrap").classList.toggle("hidden", document.getElementById("uRole").value === "admin");
+  // Member is always optional now for both roles
 }
 
 function openUserDlg(u) {
@@ -1171,23 +1174,23 @@ function openUserDlg(u) {
   document.getElementById("uEmail").value = u?.email || "";
   document.getElementById("uPwHint").textContent = u ? "(leave blank to keep current password)" : "";
   document.getElementById("uRole").value = u?.role || "employee";
-  document.getElementById("uMember").innerHTML = members.map((m) => `<option value="${m.id}">${E(m.name)}</option>`).join("");
-  if (u?.member_id) document.getElementById("uMember").value = u.member_id;
+  document.getElementById("uMember").innerHTML = `<option value="">— None (No linked team member) —</option>` + members.map((m) => `<option value="${m.id}">${E(m.name)}</option>`).join("");
+  document.getElementById("uMember").value = u?.member_id ? String(u.member_id) : "";
   document.getElementById("uActive").checked = u ? !!u.active : true;
   document.getElementById("userErr").classList.add("hidden");
-  toggleUserMember();
   userDlg.showModal();
 }
 
 async function saveUser() {
   const id = document.getElementById("userId").value;
   const role = document.getElementById("uRole").value;
+  const memberVal = document.getElementById("uMember").value;
   const errEl = document.getElementById("userErr");
   const body = {
     username: document.getElementById("uUsername").value.trim(),
     password: document.getElementById("uPassword").value,
     role,
-    member_id: role === "employee" ? +document.getElementById("uMember").value : null,
+    member_id: memberVal ? Number(memberVal) : null,
     active: document.getElementById("uActive").checked,
     email: document.getElementById("uEmail").value.trim() || null,
   };
