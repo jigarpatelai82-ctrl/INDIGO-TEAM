@@ -1256,6 +1256,27 @@ async function backup() {
   a.click();
 }
 
+// Expose global handlers to window for HTML event attributes
+Object.assign(window, {
+  api, fmtMoney, E, ym, DS, sortRows, toggleSort, sortTh, __sortClick,
+  exportCSV, exportPDF, onGlobalSearch, renderGlobalSearchResults, closeGlobalSearch,
+  goToProject, goToClient, goToMember, goToTask, doLogin, logout,
+  openChangePw, savePassword, boot, refreshNotifBadge, renderMyDay,
+  sendOverdueEmails, ackAcceptance, buildTabs, tab,
+  loadMembers, loadProjects, loadClients, loadMonth, renderCalToolbar,
+  moveMonth, todayBtn, leaveClass, leaveLabel, renderCalendar,
+  openTime, renderTimeRows, addRow, updateTotal, saveTime,
+  openLeave, saveLeave, openHoliday, saveHoliday, removeHoliday,
+  renderProjects, exportProjects, openProject, saveProject,
+  renderClients, exportClients, openClient, saveClient, removeClient,
+  editRates, saveRates, renderSummary, exportSummary,
+  renderTaskToolbar, updateTaskStatus, deleteTask, openTask, saveTask,
+  renderTasks, acceptanceBadge, acceptTask, renderPerformance,
+  renderTeam, exportTeam, editMemberRate, addMember, editMember, removeMember,
+  dragStart, dropOn, renderUsers, exportUsers, toggleUserMember,
+  openUserDlg, saveUser, disableUser, backup
+});
+
 // Initialization
 if (TOKEN && ME) {
   boot();
