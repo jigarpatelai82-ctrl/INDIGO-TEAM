@@ -255,7 +255,7 @@ async function savePassword() {
 let view = new Date();
 view.setDate(1);
 let members = [], projects = [], leaves = [], holidays = [], entries = [], days = [], clients = [];
-let activeTab = "myday";
+let activeTab = "tasks";
 const isAdmin = () => ME && ME.role === "admin";
 
 async function boot() {
@@ -265,13 +265,17 @@ async function boot() {
   document.getElementById("whoami").textContent = displayName;
   const avatarEl = document.getElementById("userAvatar");
   if (avatarEl) avatarEl.textContent = (displayName || "U").slice(0, 1).toUpperCase();
+  
+  // Default landing screen after login is always "Projects & Tasks" for both admin and employee
+  activeTab = "tasks";
+  
   buildTabs();
   await loadMembers();
   await loadProjects();
   if (isAdmin()) await loadClients();
   renderCalToolbar();
   await loadMonth();
-  tab(activeTab);
+  tab("tasks");
   refreshNotifBadge();
   if (window.__notifInterval) clearInterval(window.__notifInterval);
   window.__notifInterval = setInterval(refreshNotifBadge, 5 * 60 * 1000);
@@ -389,30 +393,30 @@ async function ackAcceptance(taskId) {
 
 function buildTabs() {
   const tabs = isAdmin() ? [
+    { id: "tasks", label: "✅ Projects & Tasks" },
     { id: "myday", label: "☀️ My Day" },
     { id: "cal", label: "🗓️ Whole Month" },
     { id: "projects", label: "📁 Projects & Budgets" },
     { id: "summary", label: "📊 Monthly Summary" },
-    { id: "tasks", label: "✅ Tasks" },
     { id: "performance", label: "📈 Employee Performance" },
     { id: "team", label: "👥 Team Management" },
     { id: "clients", label: "🏢 Clients" },
     { id: "users", label: "🔑 Access / Logins" },
   ] : [
+    { id: "tasks", label: "✅ Projects & Tasks" },
     { id: "myday", label: "☀️ My Day" },
     { id: "cal", label: "🗓️ My Timesheet" },
-    { id: "tasks", label: "✅ My Tasks" },
   ];
   const el = document.getElementById("mainTabs");
   el.innerHTML = tabs.map((t) => `<button id="btab-${t.id}" onclick="tab('${t.id}')">${t.label}</button>`).join("");
 }
 
 const TAB_META = {
+  tasks: ["Projects & Tasks", "Assign work, track priority and importance, and monitor progress."],
   myday: ["My Day", "Your tasks and today's timesheet at a glance."],
   cal: ["Whole Month", "Team attendance, leave, and daily project hours for the selected month."],
   projects: ["Projects & Budgets", "Manage projects, team allocation, fees, and manhour budgets."],
   summary: ["Monthly Summary", "Hours used, remaining budget, and labour cost by project."],
-  tasks: ["Tasks", "Assign work, track priority and importance, and monitor progress."],
   performance: ["Employee Performance", "Estimated vs. actual hours and efficiency by team member."],
   team: ["Team Management", "Add, rename, reorder, and set man-hour rates for your team."],
   clients: ["Clients", "Manage client accounts and the projects linked to each one."],
@@ -422,12 +426,12 @@ const TAB_META = {
 const ADMIN_ONLY_TABS = ["projects", "summary", "performance", "team", "clients", "users"];
 
 function tab(name) {
-  if (!isAdmin() && ADMIN_ONLY_TABS.includes(name)) name = "myday";
+  if (!isAdmin() && ADMIN_ONLY_TABS.includes(name)) name = "tasks";
   activeTab = name;
   const meta = { ...TAB_META };
   if (!isAdmin()) {
     meta.cal = ["My Timesheet", "Your attendance, leave, and daily project hours for the selected month."];
-    meta.tasks = ["My Tasks", "Work assigned to you — track priority, importance, and progress."];
+    meta.tasks = ["Projects & Tasks", "Work assigned to you — track priority, importance, and progress."];
   }
   const ph = document.getElementById("pageHeadTitle"), phs = document.getElementById("pageHeadSubtitle");
   if (ph && meta[name]) { ph.textContent = meta[name][0]; phs.textContent = meta[name][1]; }
