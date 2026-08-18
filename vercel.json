@@ -1,7 +1,7 @@
 {
   "version": 2,
   "framework": null,
-  "buildCommand": "node database/migrate.js || true",
+  "buildCommand": "npm run migrate",
   "cleanUrls": true,
   "rewrites": [
     {

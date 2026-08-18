@@ -5,18 +5,19 @@ const mailer = require("../../backend/mailer");
 const { overdueAndDueToday } = require("../../backend/routes/notifications");
 
 module.exports = async (req, res) => {
-  // 1. Verify Vercel Cron Authorization
-  const authHeader = req.headers.authorization || "";
+  // 1. Verify Vercel Cron Authorization (Fail-closed: requires CRON_SECRET)
   const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    console.error("FATAL: CRON_SECRET is not set in environment. Refusing to execute cron job.");
+    return res.status(500).json({ error: "Server Configuration Error: CRON_SECRET is not configured." });
+  }
 
-  if (cronSecret) {
-    const expectedAuth = `Bearer ${cronSecret}`;
-    if (authHeader !== expectedAuth) {
-      console.warn("Unauthorized invocation attempt on /api/cron/overdue-tasks");
-      return res.status(401).json({ error: "Unauthorized: Invalid CRON_SECRET" });
-    }
-  } else if (process.env.NODE_ENV === "production") {
-    console.warn("WARNING: CRON_SECRET is not configured in production environment.");
+  const authHeader = req.headers.authorization || "";
+  const expectedAuth = `Bearer ${cronSecret}`;
+
+  if (authHeader !== expectedAuth) {
+    console.warn("Unauthorized invocation attempt on /api/cron/overdue-tasks");
+    return res.status(401).json({ error: "Unauthorized: Invalid or missing CRON_SECRET Bearer token." });
   }
 
   // 2. Query overdue tasks
