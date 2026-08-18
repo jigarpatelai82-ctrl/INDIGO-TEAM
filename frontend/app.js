@@ -49,6 +49,20 @@ function DS(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+// Theme Management (Deep Slate & Cobalt, Light Indigo, Dark Obsidian)
+function setTheme(name) {
+  const valid = ["slate", "light", "dark"].includes(name) ? name : "slate";
+  document.documentElement.setAttribute("data-theme", valid);
+  localStorage.setItem("indigo_theme", valid);
+  document.querySelectorAll(".theme-opt").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.t === valid);
+  });
+}
+function initTheme() {
+  const current = localStorage.getItem("indigo_theme") || "slate";
+  setTheme(current);
+}
+
 // Table sort & export utilities
 const tableSortState = {};
 function sortRows(tableKey, rows, defaultCol, defaultDir = 1) {
@@ -259,6 +273,7 @@ let activeTab = "tasks";
 const isAdmin = () => ME && ME.role === "admin";
 
 async function boot() {
+  initTheme();
   document.getElementById("loginScreen").classList.add("hidden");
   document.getElementById("appRoot").classList.remove("hidden");
   const displayName = ME.member_name || ME.username;
@@ -1262,7 +1277,7 @@ async function backup() {
 
 // Expose global handlers to window for HTML event attributes
 Object.assign(window, {
-  api, fmtMoney, E, ym, DS, sortRows, toggleSort, sortTh, __sortClick,
+  api, fmtMoney, E, ym, DS, setTheme, initTheme, sortRows, toggleSort, sortTh, __sortClick,
   exportCSV, exportPDF, onGlobalSearch, renderGlobalSearchResults, closeGlobalSearch,
   goToProject, goToClient, goToMember, goToTask, doLogin, logout,
   openChangePw, savePassword, boot, refreshNotifBadge, renderMyDay,
@@ -1282,6 +1297,7 @@ Object.assign(window, {
 });
 
 // Initialization
+initTheme();
 if (TOKEN && ME) {
   boot();
 } else {
