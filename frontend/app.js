@@ -269,8 +269,18 @@ async function savePassword() {
 let view = new Date();
 view.setDate(1);
 let members = [], projects = [], leaves = [], holidays = [], entries = [], days = [], clients = [];
+let tsMonthlyData = { member: null, month: "", projects: [], entries: [], leaves: [], holidays: [], days: [] };
+let tsCurrentMemberId = null;
+let adminTsViewMode = "timesheet";
+let tsSaveTimer = null;
+const tsPendingSaves = new Map();
 let activeTab = "tasks";
 const isAdmin = () => ME && ME.role === "admin";
+
+function fmtHours(n) {
+  const num = parseFloat(n) || 0;
+  return Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.?0+$/, "");
+}
 
 async function boot() {
   initTheme();
@@ -473,24 +483,89 @@ function tab(name) {
 async function loadMembers() { members = await api("/members"); }
 async function loadProjects() { projects = await api("/projects"); }
 async function loadClients() { clients = await api("/clients"); }
+
 async function loadMonth() {
   const m = ym(view);
-  const r = await api("/summary/month?month=" + m);
-  leaves = r.leaves; holidays = r.holidays; entries = r.entries; days = r.days;
+  if (!tsCurrentMemberId && ME) {
+    tsCurrentMemberId = ME.member_id || (isAdmin() && members[0]?.id) || null;
+  }
+  const targetMid = tsCurrentMemberId || (ME ? ME.member_id : null);
+
+  const [summaryRes, monthlyRes] = await Promise.all([
+    api("/summary/month?month=" + m),
+    api(`/timesheets/monthly?month=${m}${targetMid ? "&member_id=" + targetMid : ""}`),
+  ]);
+  leaves = summaryRes.leaves;
+  holidays = summaryRes.holidays;
+  entries = summaryRes.entries;
+  days = summaryRes.days;
+  tsMonthlyData = monthlyRes;
 }
 
-// Month navigation
+// Month navigation & Toolbar
 function renderCalToolbar() {
-  document.getElementById("calToolbar").innerHTML = `
-    <button onclick="moveMonth(-1)">‹</button><div id="monthTitle" class="month" style="font-weight:700;font-size:14px;padding:0 8px;"></div><button onclick="moveMonth(1)">›</button><button onclick="todayBtn()">Today</button>
-    <button class="primary" onclick="openLeave()">+ Leave</button>
-    ${isAdmin() ? `<button onclick="backup()">Export Backup</button>` : ``}
-  `;
-}
-async function moveMonth(delta) { view.setMonth(view.getMonth() + delta); await loadMonth(); renderCalendar(); }
-async function todayBtn() { view = new Date(); view.setDate(1); await loadMonth(); renderCalendar(); }
+  const y = view.getFullYear(), m = view.getMonth();
+  let adminControls = "";
+  if (isAdmin()) {
+    const memOptions = members.map(
+      (mem) =>
+        `<option value="${mem.id}" ${tsCurrentMemberId === mem.id && adminTsViewMode === "timesheet" ? "selected" : ""}>👤 ${E(mem.name)} (Timesheet)</option>`
+    ).join("");
+    adminControls = `
+      <div style="display:inline-flex;align-items:center;gap:6px;margin:0 4px;">
+        <select id="adminTsSelect" onchange="onAdminTsSelect(this.value)" style="font-size:12.5px;padding:4px 8px;height:30px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);color:var(--text);">
+          ${memOptions}
+          <option value="matrix" ${adminTsViewMode === "matrix" ? "selected" : ""}>👥 Team Attendance Matrix (All)</option>
+        </select>
+      </div>
+      <button onclick="backup()" style="font-size:12px;padding:4px 10px;height:30px;">Export Backup</button>
+    `;
+  }
 
-// Calendar
+  const tbEl = document.getElementById("calToolbar");
+  if (tbEl) {
+    tbEl.innerHTML = `
+      <div class="toolbar-left" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <button onclick="moveMonth(-1)" title="Previous Month">‹</button>
+        <div id="monthTitle" class="month" style="font-weight:700;font-size:14px;padding:0 6px;">${MN[m]} ${y}</div>
+        <button onclick="moveMonth(1)" title="Next Month">›</button>
+        <button onclick="todayBtn()">Today</button>
+        <button class="primary" onclick="openLeave()">+ Leave</button>
+        ${adminControls}
+      </div>
+      <div class="toolbar-right" style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+        <span id="tsSaveStatus" class="ts-save-status saved">✓ All changes saved</span>
+      </div>
+    `;
+  }
+}
+
+async function moveMonth(delta) {
+  view.setMonth(view.getMonth() + delta);
+  await loadMonth();
+  renderCalendar();
+}
+
+async function todayBtn() {
+  view = new Date();
+  view.setDate(1);
+  await loadMonth();
+  renderCalendar();
+}
+
+async function onAdminTsSelect(val) {
+  if (val === "matrix") {
+    adminTsViewMode = "matrix";
+    renderCalendar();
+  } else {
+    adminTsViewMode = "timesheet";
+    tsCurrentMemberId = parseInt(val, 10);
+    await loadMonth();
+    renderCalendar();
+  }
+}
+
+// Calendar & Project-Wise Timesheet Rendering
 function leaveClass(status) {
   return { "Leave": "leave", "Tentative": "tentative", "Half-Day": "half", "WFH": "wfh", "Official": "official" }[status] || "";
 }
@@ -498,9 +573,347 @@ function leaveLabel(status) {
   return { "Leave": "LEAVE", "Tentative": "TENT.", "Half-Day": "HALF", "WFH": "WFH", "Official": "OFFICIAL", "Working-Day": "" }[status] || "";
 }
 
+function setSaveStatus(state, msg) {
+  const el = document.getElementById("tsSaveStatus");
+  if (!el) return;
+  el.className = "ts-save-status " + state;
+  if (state === "saving") el.innerHTML = `<span>⏳</span> Saving...`;
+  else if (state === "saved") el.innerHTML = `<span>✓</span> ${msg || "All changes saved"}`;
+  else if (state === "error") el.innerHTML = `<span>⚠️</span> ${msg || "Save error"}`;
+}
+
 function renderCalendar() {
+  renderCalToolbar();
+  const tsContainer = document.getElementById("timesheetContainer");
+  const calContainer = document.getElementById("calendarContainer");
+
+  if (isAdmin() && adminTsViewMode === "matrix") {
+    if (tsContainer) tsContainer.classList.add("hidden");
+    if (calContainer) calContainer.classList.remove("hidden");
+    renderTeamMatrixCalendar();
+  } else {
+    if (calContainer) calContainer.classList.add("hidden");
+    if (tsContainer) tsContainer.classList.remove("hidden");
+    renderProjectTimesheet();
+  }
+}
+
+// Render Project-Wise Timesheet (for Employee or Selected Admin Member)
+function renderProjectTimesheet() {
+  const container = document.getElementById("timesheetContainer");
+  if (!container) return;
   const y = view.getFullYear(), m = view.getMonth();
-  document.getElementById("monthTitle").textContent = `${MN[m]} ${y}`;
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const today = new Date();
+  const todayStr = DS(today.getFullYear(), today.getMonth(), today.getDate());
+
+  const holMap = Object.fromEntries((tsMonthlyData.holidays || []).map((h) => [h.date, h]));
+  const leaveMap = Object.fromEntries((tsMonthlyData.leaves || []).map((l) => [l.date, l]));
+
+  // Build entry map: key = `${project_id}_${date}` -> entry
+  const entryMap = {};
+  let monthGrandTotal = 0;
+  (tsMonthlyData.entries || []).forEach((e) => {
+    entryMap[`${e.project_id}_${e.date}`] = e;
+    monthGrandTotal += parseFloat(e.hours) || 0;
+  });
+
+  const memberProjects = tsMonthlyData.projects || [];
+  const targetMemberId = tsMonthlyData.member?.id || (ME ? ME.member_id : null);
+
+  if (!memberProjects.length) {
+    container.innerHTML = `
+      <div class="ts-empty-card">
+        <div class="ts-empty-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        </div>
+        <h4>No Projects Assigned</h4>
+        <p>There are no active projects assigned to <b>${E(tsMonthlyData.member?.name || "you")}</b> for ${MN[m]} ${y}. Once an administrator assigns projects, they will appear here automatically for daily hours entry.</p>
+      </div>
+    `;
+    return;
+  }
+
+  // Build the Table
+  let html = `<table id="timesheetTable" class="ts-sheet-table">`;
+
+  // THEAD
+  html += `<thead><tr>`;
+  html += `<th class="ts-col-proj">PROJECT / PROJECT NO.</th>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = DS(y, m, d);
+    const dow = new Date(y, m, d).getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const isToday = ds === todayStr;
+    const hol = holMap[ds];
+    const lv = leaveMap[ds];
+
+    let thCls = "ts-th-date";
+    if (isToday) thCls += " is-today";
+    if (isWeekend) thCls += " is-weekend";
+    if (hol) thCls += " is-holiday";
+    if (lv && lv.status && lv.status !== "Working-Day") thCls += " is-leave";
+
+    let badge = "";
+    if (hol) {
+      badge = `<span class="ts-date-badge ts-badge-holiday" title="${E(hol.name)}">HOL</span>`;
+    } else if (lv && lv.status && lv.status !== "Working-Day") {
+      const bCls = lv.status === "Leave" ? "ts-badge-leave" : lv.status === "Half-Day" ? "ts-badge-half" : "ts-badge-wfh";
+      badge = `<span class="ts-date-badge ${bCls}" title="${E(lv.status)}">${leaveLabel(lv.status)}</span>`;
+    }
+
+    html += `
+      <th class="${thCls}" title="${hol ? E(hol.name) : ds}">
+        <span class="ts-date-num">${d}</span>
+        <span class="ts-date-dow">${DAYN[dow]}</span>
+        ${badge}
+      </th>
+    `;
+  }
+  html += `<th class="ts-col-total">TOTAL</th>`;
+  html += `</tr></thead>`;
+
+  // TBODY
+  html += `<tbody>`;
+  const dayTotals = Array(daysInMonth + 1).fill(0);
+
+  memberProjects.forEach((p) => {
+    let projMonthlyTotal = 0;
+    html += `<tr>`;
+    // Sticky Project Column
+    html += `
+      <td class="ts-col-proj">
+        <div class="ts-proj-info">
+          <div class="ts-proj-top">
+            <span class="ts-proj-no">${E(p.project_no || "PRJ-" + p.id)}</span>
+            <span class="ts-proj-abbr">${E(p.abbr || "")}</span>
+          </div>
+          <div class="ts-proj-name" title="${E(p.name)}">${E(p.name)}</div>
+        </div>
+      </td>
+    `;
+
+    // Date cells for this project
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = DS(y, m, d);
+      const dow = new Date(y, m, d).getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      const hol = holMap[ds];
+      const lv = leaveMap[ds];
+      const entry = entryMap[`${p.id}_${ds}`];
+      const hours = entry ? parseFloat(entry.hours) || 0 : 0;
+      if (hours > 0) {
+        projMonthlyTotal += hours;
+        dayTotals[d] += hours;
+      }
+
+      let tdCls = "ts-td-cell";
+      if (isWeekend) tdCls += " is-weekend";
+      if (hol) tdCls += " is-holiday";
+      if (lv && lv.status && lv.status !== "Working-Day") tdCls += " is-leave";
+
+      const valStr = hours > 0 ? fmtHours(hours) : "";
+      const hasValCls = hours > 0 ? "has-value" : "";
+
+      html += `
+        <td class="${tdCls}">
+          <input
+            type="number"
+            step="0.5"
+            min="0"
+            max="24"
+            class="ts-cell-input ${hasValCls}"
+            data-mid="${targetMemberId}"
+            data-pid="${p.id}"
+            data-date="${ds}"
+            data-d="${d}"
+            value="${valStr}"
+            placeholder="-"
+            title="${E(p.project_no)} · ${E(p.name)} — ${ds}${entry?.narration ? `\nNarration: ${entry.narration}` : ""}"
+            oninput="onTsCellInput(this)"
+            onblur="onTsCellBlur(this)"
+            onkeydown="onTsCellKeydown(event, this)"
+          />
+        </td>
+      `;
+    }
+
+    // Right Project Monthly Total
+    html += `
+      <td class="ts-col-total">
+        <span id="ts-proj-tot-${p.id}">${fmtHours(projMonthlyTotal)}</span>
+      </td>
+    `;
+    html += `</tr>`;
+  });
+  html += `</tbody>`;
+
+  // TFOOT (Sticky Daily Total Row)
+  html += `<tfoot><tr class="ts-row-total">`;
+  html += `<td class="ts-col-proj">DAILY TOTAL</td>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = DS(y, m, d);
+    const dt = dayTotals[d] || 0;
+    const isNine = dt === 9;
+    const isOver = dt > 9;
+    const isZero = dt === 0;
+    const cls = isNine ? "is-nine" : isOver ? "is-over" : isZero ? "is-zero" : "";
+    html += `
+      <td>
+        <span id="ts-day-tot-${ds}" class="ts-day-total-val ${cls}">
+          ${dt > 0 ? fmtHours(dt) : "-"}
+        </span>
+      </td>
+    `;
+  }
+  html += `
+    <td class="ts-col-total">
+      <div class="ts-month-grand-total">
+        <span class="ts-month-grand-total-label">Month Total</span>
+        <span id="ts-grand-total" class="ts-month-grand-total-val">${fmtHours(monthGrandTotal)} hrs</span>
+      </div>
+    </td>
+  `;
+  html += `</tr></tfoot>`;
+
+  html += `</table>`;
+  container.innerHTML = html;
+}
+
+// Instant Calculation & Debounced Autosave Handlers
+function onTsCellInput(input) {
+  const mid = parseInt(input.dataset.mid, 10);
+  const pid = parseInt(input.dataset.pid, 10);
+  const date = input.dataset.date;
+  let rawVal = input.value.trim();
+  let numVal = parseFloat(rawVal);
+
+  if (isNaN(numVal) || numVal < 0) numVal = 0;
+  if (numVal > 24) {
+    numVal = 24;
+    input.value = "24";
+  }
+
+  // Update cell styling
+  input.classList.toggle("has-value", numVal > 0);
+
+  // Recalculate Project Row Total
+  let rowTotal = 0;
+  document.querySelectorAll(`.ts-cell-input[data-pid="${pid}"]`).forEach((inp) => {
+    rowTotal += parseFloat(inp.value) || 0;
+  });
+  const rowTotEl = document.getElementById(`ts-proj-tot-${pid}`);
+  if (rowTotEl) rowTotEl.textContent = fmtHours(rowTotal);
+
+  // Recalculate Day Column Total
+  let dayTotal = 0;
+  document.querySelectorAll(`.ts-cell-input[data-date="${date}"]`).forEach((inp) => {
+    dayTotal += parseFloat(inp.value) || 0;
+  });
+  const dayTotEl = document.getElementById(`ts-day-tot-${date}`);
+  if (dayTotEl) {
+    dayTotEl.textContent = dayTotal > 0 ? fmtHours(dayTotal) : "-";
+    dayTotEl.className = `ts-day-total-val ${dayTotal === 9 ? "is-nine" : dayTotal > 9 ? "is-over" : dayTotal === 0 ? "is-zero" : ""}`;
+  }
+
+  // Recalculate Month Grand Total
+  let monthTotal = 0;
+  document.querySelectorAll(".ts-cell-input").forEach((inp) => {
+    monthTotal += parseFloat(inp.value) || 0;
+  });
+  const grandTotEl = document.getElementById("ts-grand-total");
+  if (grandTotEl) grandTotEl.textContent = fmtHours(monthTotal) + " hrs";
+
+  // Queue save
+  setSaveStatus("saving");
+  const saveKey = `${mid}_${pid}_${date}`;
+  tsPendingSaves.set(saveKey, { mid, pid, date, hours: numVal, input });
+
+  if (tsSaveTimer) clearTimeout(tsSaveTimer);
+  tsSaveTimer = setTimeout(flushTsSaves, 400);
+}
+
+function onTsCellBlur(input) {
+  if (input.value.trim() === "" || parseFloat(input.value) === 0) {
+    input.value = "";
+    input.classList.remove("has-value");
+  } else {
+    const v = parseFloat(input.value);
+    if (!isNaN(v)) input.value = fmtHours(v);
+  }
+  flushTsSaves();
+}
+
+async function flushTsSaves() {
+  if (tsSaveTimer) {
+    clearTimeout(tsSaveTimer);
+    tsSaveTimer = null;
+  }
+  if (tsPendingSaves.size === 0) return;
+
+  const entriesToSave = Array.from(tsPendingSaves.values());
+  tsPendingSaves.clear();
+
+  try {
+    for (const item of entriesToSave) {
+      await api("/timesheets/save-cell", {
+        method: "POST",
+        body: {
+          member_id: item.mid,
+          project_id: item.pid,
+          date: item.date,
+          hours: item.hours,
+        },
+      });
+      if (item.input) {
+        item.input.classList.remove("save-error");
+        item.input.classList.add("just-saved");
+        setTimeout(() => item.input && item.input.classList.remove("just-saved"), 900);
+      }
+    }
+    setSaveStatus("saved", "All changes saved");
+  } catch (err) {
+    console.error("Save timesheet cell error:", err);
+    setSaveStatus("error", "Error saving hours. Please retry.");
+    entriesToSave.forEach((item) => {
+      if (item.input) item.input.classList.add("save-error");
+    });
+  }
+}
+
+function onTsCellKeydown(e, input) {
+  const colIndex = parseInt(input.dataset.d, 10); // 1..31
+
+  if (e.key === "Enter" || e.key === "ArrowDown") {
+    e.preventDefault();
+    const allRows = Array.from(document.querySelectorAll("#timesheetTable tbody tr"));
+    const currentRow = input.closest("tr");
+    const currentIndex = allRows.indexOf(currentRow);
+    if (currentIndex < allRows.length - 1) {
+      const nextInput = allRows[currentIndex + 1].querySelector(`.ts-cell-input[data-d="${colIndex}"]`);
+      if (nextInput) { nextInput.focus(); nextInput.select(); }
+    }
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    const allRows = Array.from(document.querySelectorAll("#timesheetTable tbody tr"));
+    const currentRow = input.closest("tr");
+    const currentIndex = allRows.indexOf(currentRow);
+    if (currentIndex > 0) {
+      const prevInput = allRows[currentIndex - 1].querySelector(`.ts-cell-input[data-d="${colIndex}"]`);
+      if (prevInput) { prevInput.focus(); prevInput.select(); }
+    }
+  } else if (e.key === "ArrowRight" && (input.selectionStart === input.value.length || e.ctrlKey || e.altKey)) {
+    const nextInput = input.closest("tr").querySelector(`.ts-cell-input[data-d="${colIndex + 1}"]`);
+    if (nextInput) { e.preventDefault(); nextInput.focus(); nextInput.select(); }
+  } else if (e.key === "ArrowLeft" && (input.selectionStart === 0 || e.ctrlKey || e.altKey)) {
+    const prevInput = input.closest("tr").querySelector(`.ts-cell-input[data-d="${colIndex - 1}"]`);
+    if (prevInput) { e.preventDefault(); prevInput.focus(); prevInput.select(); }
+  }
+}
+
+// Team Matrix Calendar (for Admin Whole Month Matrix view)
+function renderTeamMatrixCalendar() {
+  const y = view.getFullYear(), m = view.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const holMap = Object.fromEntries(holidays.map((h) => [h.date, h]));
   const leaveMap = {}; leaves.forEach((l) => leaveMap[l.member_id + "_" + l.date] = l);
@@ -519,7 +932,7 @@ function renderCalendar() {
   let body = "";
   const visibleMembers = isAdmin() ? members : members.filter((mm) => mm.id === ME.member_id);
   visibleMembers.forEach((mem) => {
-    body += `<tr><td class="name">${E(mem.name)}</td>`;
+    body += `<tr><td class="name" style="cursor:pointer;" onclick="onAdminTsSelect('${mem.id}')" title="Click to open ${E(mem.name)}'s Project Timesheet">${E(mem.name)} ↗</td>`;
     for (let d = 1; d <= daysInMonth; d++) {
       const ds = DS(y, m, d);
       const dow = new Date(y, m, d).getDay();
@@ -1277,13 +1690,15 @@ async function backup() {
 
 // Expose global handlers to window for HTML event attributes
 Object.assign(window, {
-  api, fmtMoney, E, ym, DS, setTheme, initTheme, sortRows, toggleSort, sortTh, __sortClick,
+  api, fmtMoney, fmtHours, E, ym, DS, setTheme, initTheme, sortRows, toggleSort, sortTh, __sortClick,
   exportCSV, exportPDF, onGlobalSearch, renderGlobalSearchResults, closeGlobalSearch,
   goToProject, goToClient, goToMember, goToTask, doLogin, logout,
   openChangePw, savePassword, boot, refreshNotifBadge, renderMyDay,
   sendOverdueEmails, ackAcceptance, buildTabs, tab,
   loadMembers, loadProjects, loadClients, loadMonth, renderCalToolbar,
-  moveMonth, todayBtn, leaveClass, leaveLabel, renderCalendar,
+  moveMonth, todayBtn, onAdminTsSelect, leaveClass, leaveLabel, setSaveStatus,
+  renderCalendar, renderProjectTimesheet, renderTeamMatrixCalendar,
+  onTsCellInput, onTsCellBlur, flushTsSaves, onTsCellKeydown,
   openTime, renderTimeRows, addRow, updateTotal, saveTime,
   openLeave, saveLeave, openHoliday, saveHoliday, removeHoliday,
   renderProjects, exportProjects, openProject, saveProject,

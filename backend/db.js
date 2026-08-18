@@ -162,6 +162,8 @@ async function initSchema() {
   await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP`);
   await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS admin_seen_acceptance INTEGER NOT NULL DEFAULT 1`);
   await query(`ALTER TABLE timesheet_entries ADD COLUMN IF NOT EXISTS narration TEXT DEFAULT ''`);
+  await query(`ALTER TABLE timesheet_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW()`);
+  await query(`ALTER TABLE timesheet_entries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW()`);
   await query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL`);
 
   // Ensure high-performance indexes
@@ -172,6 +174,7 @@ async function initSchema() {
   await query(`CREATE INDEX IF NOT EXISTS idx_timesheet_entries_member_date ON timesheet_entries(member_id, date)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_timesheet_entries_project ON timesheet_entries(project_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_leaves_date ON leaves(date)`);
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_timesheet_member_project_date ON timesheet_entries (member_id, project_id, date)`);
 
   schemaInitialized = true;
 }

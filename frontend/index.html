@@ -543,6 +543,169 @@
     #calendar .total { display: block; font-size: 9.5px; color: var(--text-muted); }
     #calendar .extra { display: inline-block; color: var(--danger); font-weight: bold; margin-left: 2px; }
 
+    /* Project-Wise Monthly Timesheet Matrix */
+    .ts-table-container {
+      position: relative; overflow: auto; max-height: calc(100vh - 210px);
+      border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+      box-shadow: var(--shadow-xs);
+    }
+    .ts-sheet-table {
+      width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0;
+      font-size: 12px; color: var(--text);
+    }
+    .ts-sheet-table th, .ts-sheet-table td {
+      border-right: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);
+      padding: 0; text-align: center;
+    }
+    /* Sticky Top Header */
+    .ts-sheet-table thead th {
+      position: sticky; top: 0; z-index: 20; background: var(--surface-secondary);
+      font-weight: 600; color: var(--text); padding: 8px 4px;
+    }
+    /* Sticky Left Project Column */
+    .ts-sheet-table .ts-col-proj {
+      position: sticky; left: 0; z-index: 15; width: 280px; min-width: 280px; max-width: 320px;
+      text-align: left; background: var(--surface); border-right: 2px solid var(--border);
+      box-shadow: 2px 0 6px rgba(0, 0, 0, 0.03);
+    }
+    .ts-sheet-table thead th.ts-col-proj {
+      z-index: 30; background: var(--surface-secondary); padding: 10px 14px;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light);
+    }
+    .ts-sheet-table tbody td.ts-col-proj {
+      padding: 10px 14px; background: var(--surface);
+    }
+    .ts-sheet-table tbody tr:hover td.ts-col-proj {
+      background: var(--surface-secondary);
+    }
+    .ts-sheet-table tbody tr:hover td {
+      background-color: rgba(37, 99, 235, 0.02);
+    }
+
+    .ts-proj-info { display: flex; flex-direction: column; gap: 3px; }
+    .ts-proj-top { display: flex; align-items: center; gap: 8px; }
+    .ts-proj-no {
+      font-size: 11px; font-weight: 700; font-family: ui-monospace, monospace;
+      padding: 2px 6px; border-radius: 4px; background: var(--primary-soft);
+      color: var(--primary); letter-spacing: 0.02em; white-space: nowrap;
+    }
+    .ts-proj-abbr {
+      font-size: 10px; font-weight: 600; color: var(--text-light); text-transform: uppercase;
+    }
+    .ts-proj-name {
+      font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.3;
+      white-space: normal; word-break: break-word;
+    }
+
+    /* Date column headers */
+    .ts-th-date { min-width: 52px; width: 52px; padding: 6px 2px !important; }
+    .ts-date-num { font-size: 13px; font-weight: 700; display: block; line-height: 1.1; }
+    .ts-date-dow { font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); display: block; margin-top: 1px; }
+    .ts-th-date.is-today { background: var(--primary-soft) !important; color: var(--primary) !important; }
+    .ts-th-date.is-today .ts-date-dow { color: var(--primary); }
+    .ts-th-date.is-weekend { background: rgba(0, 0, 0, 0.025); }
+    .ts-th-date.is-holiday { background: var(--danger-soft) !important; color: var(--danger-soft-text) !important; }
+    .ts-th-date.is-leave { background: var(--warning-soft) !important; color: var(--warning-soft-text) !important; }
+
+    .ts-date-badge {
+      font-size: 8.5px; font-weight: 700; text-transform: uppercase; padding: 1px 3px;
+      border-radius: 3px; display: inline-block; margin-top: 2px;
+    }
+    .ts-badge-holiday { background: var(--danger); color: #fff; }
+    .ts-badge-leave { background: #d97706; color: #fff; }
+    .ts-badge-half { background: #2563eb; color: #fff; }
+    .ts-badge-wfh { background: #0284c7; color: #fff; }
+
+    /* Editable Daily Hours Input */
+    .ts-td-cell {
+      min-width: 52px; width: 52px; height: 42px; position: relative; padding: 0 !important;
+      background: var(--surface);
+    }
+    .ts-td-cell.is-weekend { background: rgba(0, 0, 0, 0.015); }
+    .ts-td-cell.is-holiday { background: rgba(239, 68, 68, 0.03); }
+    .ts-td-cell.is-leave { background: rgba(245, 158, 11, 0.03); }
+    
+    .ts-cell-input {
+      width: 100%; height: 100%; border: 1px solid transparent; background: transparent;
+      text-align: center; font-size: 13px; font-weight: 600; color: var(--text);
+      outline: none; transition: all 0.15s ease; border-radius: 0; padding: 0;
+      -moz-appearance: textfield;
+    }
+    .ts-cell-input::-webkit-outer-spin-button,
+    .ts-cell-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .ts-cell-input:hover { background: rgba(37, 99, 235, 0.04); border-color: var(--border-subtle); }
+    .ts-cell-input:focus {
+      background: var(--surface); border-color: var(--primary);
+      box-shadow: inset 0 0 0 1.5px var(--primary); z-index: 5; position: relative;
+    }
+    .ts-cell-input.has-value { font-weight: 700; color: var(--primary); }
+    .ts-cell-input.just-saved {
+      background: var(--success-soft) !important; transition: background 0.4s ease;
+    }
+    .ts-cell-input.save-error {
+      background: var(--danger-soft) !important; border-color: var(--danger) !important;
+    }
+
+    /* Right Total Column */
+    .ts-col-total {
+      min-width: 100px; width: 100px; text-align: right !important; padding: 10px 14px !important;
+      font-weight: 700; font-size: 13px; border-left: 2px solid var(--border);
+      background: var(--surface-secondary); color: var(--text);
+    }
+    thead th.ts-col-total {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light);
+    }
+
+    /* Sticky Bottom Daily Total Row */
+    .ts-row-total td {
+      position: sticky; bottom: 0; z-index: 22; background: var(--surface-secondary) !important;
+      font-weight: 700; font-size: 13px; border-top: 2px solid var(--border);
+      padding: 10px 4px; box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.04);
+    }
+    .ts-row-total td.ts-col-proj {
+      z-index: 35; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--text); padding-left: 14px;
+    }
+    .ts-day-total-val { font-size: 12.5px; font-weight: 700; color: var(--text); }
+    .ts-day-total-val.is-nine { color: var(--success); }
+    .ts-day-total-val.is-over { color: #2563eb; }
+    .ts-day-total-val.is-zero { color: var(--text-light); opacity: 0.5; }
+
+    .ts-month-grand-total {
+      display: inline-flex; flex-direction: column; align-items: flex-end; justify-content: center;
+      gap: 1px;
+    }
+    .ts-month-grand-total-label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-light); }
+    .ts-month-grand-total-val { font-size: 14px; font-weight: 800; color: var(--primary); }
+
+    /* Save Status Indicator Badge */
+    .ts-save-status {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+      padding: 4px 10px; border-radius: 20px; transition: all 0.2s ease;
+    }
+    .ts-save-status.saved {
+      color: var(--success); background: var(--success-soft); border: 1px solid var(--success-border);
+    }
+    .ts-save-status.saving {
+      color: var(--primary); background: var(--primary-soft); border: 1px solid var(--primary-border);
+    }
+    .ts-save-status.error {
+      color: var(--danger); background: var(--danger-soft); border: 1px solid var(--danger-border);
+    }
+
+    /* Empty state */
+    .ts-empty-card {
+      padding: 48px 24px; text-align: center; background: var(--surface);
+      border: 1px dashed var(--border); border-radius: var(--radius); margin: 20px 0;
+    }
+    .ts-empty-icon {
+      width: 48px; height: 48px; margin: 0 auto 16px auto; border-radius: 50%;
+      background: var(--surface-secondary); display: flex; align-items: center; justify-content: center;
+      color: var(--text-light);
+    }
+    .ts-empty-card h4 { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .ts-empty-card p { font-size: 13.5px; color: var(--text-muted); max-width: 420px; margin: 0 auto; }
+
     /* Modals / Dialogs (Redesigned SaaS Architecture) */
     dialog {
       border: 1px solid var(--border); border-radius: var(--radius-lg);
@@ -712,10 +875,13 @@
         <div id="mydayTasks"></div>
       </section>
 
-      <!-- TAB: WHOLE MONTH CALENDAR -->
+      <!-- TAB: TIMESHEET & MONTHLY CALENDAR -->
       <section id="tab-cal" class="hidden">
         <div class="toolbar" id="calToolbar"></div>
-        <div class="table-card">
+        <div id="timesheetContainer" class="ts-table-container">
+          <table id="timesheetTable" class="ts-sheet-table"></table>
+        </div>
+        <div id="calendarContainer" class="table-card hidden">
           <div class="table-wrap">
             <table id="calendar"></table>
           </div>
