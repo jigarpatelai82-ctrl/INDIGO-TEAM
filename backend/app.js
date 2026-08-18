@@ -33,14 +33,20 @@ app.use("/api/summary", require("./routes/summary"));
 app.use("/api/notifications", require("./routes/notifications"));
 
 // Serve static frontend assets for monolithic / local runtime
+const distPath = path.join(__dirname, "..", "dist");
 const frontendPath = path.join(__dirname, "..", "frontend");
+app.use(express.static(distPath));
 app.use(express.static(frontendPath));
 
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ error: "API endpoint not found" });
   }
-  res.sendFile(path.join(frontendPath, "index.html"), (err) => {
+  const fs = require("fs");
+  const targetHtml = fs.existsSync(path.join(distPath, "index.html"))
+    ? path.join(distPath, "index.html")
+    : path.join(frontendPath, "index.html");
+  res.sendFile(targetHtml, (err) => {
     if (err) next();
   });
 });

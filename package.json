@@ -8,6 +8,7 @@
     "migrate": "node database/migrate.js",
     "seed": "node backend/seed.js",
     "build": "vite build",
+    "vercel-build": "node database/migrate.js && vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
