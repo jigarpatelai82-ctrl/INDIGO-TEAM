@@ -193,16 +193,24 @@ router.put("/:id", authRequired, async (req, res) => {
       );
       res.json({ ok: true, task: updated.rows[0] });
     } else {
-      const { status } = req.body || {};
-      if (!status) return res.status(400).json({ error: "Status is required" });
+      const { status, importance } = req.body || {};
+      if (status === undefined && importance === undefined) {
+        return res.status(400).json({ error: "Status or importance is required" });
+      }
+      const newStatus = status !== undefined ? status : t.status;
+      const newImportance =
+        importance !== undefined && ["High", "Medium", "Low"].includes(importance)
+          ? importance
+          : t.importance;
 
       const updated = await db.query(
         `UPDATE tasks
          SET status = $1,
+             importance = $2,
              completed_at = CASE WHEN $1 = 'Completed' THEN COALESCE(completed_at, NOW()) ELSE NULL END
-         WHERE id = $2
+         WHERE id = $3
          RETURNING *`,
-        [status, t.id]
+        [newStatus, newImportance, t.id]
       );
       res.json({ ok: true, task: updated.rows[0] });
     }

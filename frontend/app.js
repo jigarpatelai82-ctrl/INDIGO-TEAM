@@ -1990,23 +1990,173 @@ function exportSummary(fmt) {
 }
 __tableRerender.summary = renderSummary;
 
-// Tasks
-let taskFilter = { status: "", member_id: "" };
+// Tasks & Master Dashboard
+let taskPersonFilter = "";
+let taskViewFilter = "open"; // 'open', 'all', 'overdue', 'important'
+let taskSearchQuery = "";
+let projectOrder = [];
+try {
+  projectOrder = JSON.parse(localStorage.getItem("indigo_project_order") || "[]");
+} catch (e) {
+  projectOrder = [];
+}
+
 function renderTaskToolbar() {
-  const memberOpts = isAdmin() ? `<option value="">All Team Members</option>` + members.map((m) => `<option value="${m.id}" ${String(taskFilter.member_id) === String(m.id) ? "selected" : ""}>${E(m.name)}</option>`).join("") : "";
-  document.getElementById("taskToolbar").innerHTML = `
-    ${isAdmin() ? `<button class="primary" onclick="openTask()">+ Assign Task</button>
-    <select onchange="taskFilter.member_id=this.value;renderTasks()">${memberOpts}</select>` : ``}
-    <select onchange="taskFilter.status=this.value;renderTasks()">
-      <option value="" ${taskFilter.status === "" ? "selected" : ""}>All Statuses</option>
-      <option value="Pending" ${taskFilter.status === "Pending" ? "selected" : ""}>Pending</option>
-      <option value="In Progress" ${taskFilter.status === "In Progress" ? "selected" : ""}>In Progress</option>
-      <option value="Completed" ${taskFilter.status === "Completed" ? "selected" : ""}>Completed</option>
-      <option value="On Hold" ${taskFilter.status === "On Hold" ? "selected" : ""}>On Hold</option>
-    </select>`;
+  const memberOpts = isAdmin()
+    ? `<option value="">All People</option>` + members.map((m) => `<option value="${m.id}" ${String(taskPersonFilter) === String(m.id) ? "selected" : ""}>👤 ${E(m.name)}</option>`).join("")
+    : `<option value="">My Tasks</option>`;
+
+  const toolbarEl = document.getElementById("taskToolbar");
+  if (!toolbarEl) return;
+
+  toolbarEl.innerHTML = `
+    <div class="toolbar-left" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <select id="taskPersonFilterSelect" onchange="onTaskPersonFilter(this.value)" style="min-width:140px;">
+        ${memberOpts}
+      </select>
+      <select id="taskViewFilterSelect" onchange="onTaskViewFilter(this.value)" style="min-width:130px;">
+        <option value="open" ${taskViewFilter === "open" ? "selected" : ""}>Open Tasks</option>
+        <option value="all" ${taskViewFilter === "all" ? "selected" : ""}>All Tasks</option>
+        <option value="overdue" ${taskViewFilter === "overdue" ? "selected" : ""}>Overdue</option>
+        <option value="important" ${taskViewFilter === "important" ? "selected" : ""}>Important</option>
+      </select>
+      <div class="task-search-box">
+        <span class="task-search-icon">🔍</span>
+        <input type="text" id="taskSearchInput" class="task-search-input" placeholder="Search tasks / projects / people..." value="${E(taskSearchQuery)}" oninput="onTaskSearchInput(this.value)" autocomplete="off">
+      </div>
+    </div>
+    <div class="toolbar-right" style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+      ${isAdmin() ? `
+        <button type="button" class="btn" onclick="openProject()" title="Add new project">+ Project</button>
+        <button type="button" class="primary" onclick="openTask()" title="Assign new task">+ Task</button>
+      ` : ''}
+    </div>
+  `;
+}
+
+function onTaskPersonFilter(val) {
+  taskPersonFilter = val;
+  renderTasks();
+}
+
+function onTaskViewFilter(val) {
+  taskViewFilter = val;
+  renderTasks();
+}
+
+function onTaskSearchInput(val) {
+  taskSearchQuery = val;
+  renderTasks();
+}
+
+// Project Card Drag & Drop Ordering
+let draggedProjectId = null;
+function onProjectDragStart(e, id) {
+  draggedProjectId = Number(id);
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", String(id));
+  const card = e.currentTarget.closest(".project-card");
+  if (card) card.classList.add("dragging");
+}
+
+function onProjectDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  const card = e.currentTarget.closest(".project-card");
+  if (card) card.classList.add("drag-over");
+}
+
+function onProjectDragLeave(e) {
+  const card = e.currentTarget.closest(".project-card");
+  if (card) card.classList.remove("drag-over");
+}
+
+function onProjectDragEnd(e) {
+  document.querySelectorAll(".project-card").forEach((c) => c.classList.remove("dragging", "drag-over"));
+}
+
+async function onProjectDrop(e, targetId) {
+  e.preventDefault();
+  document.querySelectorAll(".project-card").forEach((c) => c.classList.remove("dragging", "drag-over"));
+  const tId = Number(targetId);
+  if (!draggedProjectId || draggedProjectId === tId) return;
+
+  let currentIds = projects.map((p) => p.id);
+  if (projectOrder && projectOrder.length) {
+    const existingInOrder = projectOrder.filter((id) => currentIds.includes(id));
+    const missing = currentIds.filter((id) => !existingInOrder.includes(id));
+    currentIds = [...existingInOrder, ...missing];
+  }
+
+  const fromIdx = currentIds.indexOf(draggedProjectId);
+  const toIdx = currentIds.indexOf(tId);
+  if (fromIdx !== -1 && toIdx !== -1) {
+    currentIds.splice(fromIdx, 1);
+    currentIds.splice(toIdx, 0, draggedProjectId);
+    projectOrder = currentIds;
+    localStorage.setItem("indigo_project_order", JSON.stringify(projectOrder));
+    renderTasks();
+  }
+}
+
+// Project Rename & Add Task to Project Helpers
+function renameProject(id, currentName) {
+  document.getElementById("renameProjId").value = id;
+  document.getElementById("renameProjName").value = currentName || "";
+  document.getElementById("renameProjErr").classList.add("hidden");
+  document.getElementById("renameProjDlg").showModal();
+}
+
+async function submitRenameProject() {
+  const id = document.getElementById("renameProjId").value;
+  const name = document.getElementById("renameProjName").value.trim();
+  const errEl = document.getElementById("renameProjErr");
+  if (!name) {
+    errEl.textContent = "Project name is required";
+    errEl.classList.remove("hidden");
+    return;
+  }
+  try {
+    await api("/projects/" + id, { method: "PUT", body: { name } });
+    document.getElementById("renameProjDlg").close();
+    await loadProjects();
+    await renderTasks();
+    if (activeTab === "projects") renderProjects();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove("hidden");
+  }
+}
+
+function openTaskForProject(projectId) {
+  openTask();
+  const sel = document.getElementById("tProject");
+  if (sel) sel.value = projectId || "";
+}
+
+async function toggleTaskComplete(id, isChecked) {
+  const status = isChecked ? "Completed" : "Pending";
+  await updateTaskStatus(id, status);
+}
+
+async function toggleTaskStar(id, e) {
+  if (e) e.stopPropagation();
+  const t = (window.__taskCache || []).find((x) => x.id === id);
+  const newImp = (t && t.importance === "High") ? "Medium" : "High";
+  try {
+    await api("/tasks/" + id, { method: "PUT", body: { importance: newImp } });
+    await renderTasks();
+  } catch (err) {
+    console.error("Failed to toggle task star:", err);
+  }
+}
+
+async function undoCompletedTask(id) {
+  await updateTaskStatus(id, "Pending");
 }
 
 const impClass = { High: "impHigh", Medium: "impMedium", Low: "impLow" };
+
 async function updateTaskStatus(id, status) {
   const errEl = document.getElementById(`task-error-${id}`);
   if (errEl) {
@@ -2030,6 +2180,7 @@ async function updateTaskStatus(id, status) {
     }
   }
 }
+
 async function deleteTask(id) {
   if (!confirm("Delete this task?")) return;
   await api("/tasks/" + id, { method: "DELETE" });
@@ -2098,18 +2249,218 @@ async function saveTask() {
   }
 }
 
+function renderMasterDashboardTaskHtml(t) {
+  const isCompleted = t.status === "Completed";
+  const overdue = !isCompleted && t.due_date && new Date(t.due_date) < new Date(new Date().toDateString());
+  const isMine = isTaskAssignedToMe(t);
+  const isAwaiting = !t.accepted_at && !t.declined_at && t.acceptance_status !== "accepted" && t.acceptance_status !== "declined";
+  const isAccepted = Boolean(t.accepted_at) || t.acceptance_status === "accepted";
+  const isDeclined = Boolean(t.declined_at) || t.acceptance_status === "declined";
+  const isImportant = t.importance === "High";
+  const safeTitle = E(t.title || "").replace(/'/g, "\\'");
+
+  return `
+    <div class="task ${isImportant ? 'important' : ''} ${overdue ? 'overdue' : ''}" id="task-item-${t.id}">
+      <div class="task-top">
+        <input type="checkbox" ${isCompleted ? 'checked' : ''} onchange="toggleTaskComplete(${t.id}, this.checked)" title="${isCompleted ? 'Re-open task' : 'Mark completed'}">
+        <button type="button" class="star ${isImportant ? 'selected' : ''}" onclick="toggleTaskStar(${t.id}, event)" title="${isImportant ? 'High Importance (Click to unstar)' : 'Normal (Click to mark High Importance)'}">★</button>
+        <span class="task-title task-title-span" onclick="${isAdmin() ? `openTask(${t.id})` : ''}" title="${E(t.title)}">${E(t.title)}</span>
+        ${isAdmin() ? `<button type="button" class="btn-sm" onclick="openTask(${t.id})" title="Edit task" style="padding:2px 6px;height:22px;font-size:11px;margin-left:auto;">✎</button>` : ''}
+      </div>
+      ${t.description ? `<div style="font-size:11.5px;color:var(--text-muted);margin:4px 0 2px 24px;line-height:1.4;">${E(t.description)}</div>` : ''}
+      <div class="task-meta" style="margin-left:24px;">
+        <span>👤 ${E(t.member_name)}</span>
+        ${overdue ? `<span style="color:#dc2626;font-weight:700;"> · ⚠️ OVERDUE</span>` : (t.due_date ? `<span> · Due ${fmtDateOnly(t.due_date)}</span>` : '')}
+        <span> · P${t.priority}</span>
+        ${t.estimated_hours ? `<span> · ${t.estimated_hours}h</span>` : ''}
+        ${isAccepted ? `<span style="color:var(--success);font-weight:600;"> · ✓ Accepted</span>` : ''}
+        ${isDeclined ? `<span style="color:var(--danger);font-weight:600;"> · ✕ Declined</span>` : ''}
+      </div>
+      ${isMine && isAwaiting ? `
+        <div style="margin:8px 0 4px 24px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button type="button" class="primary btn-sm" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})" style="padding:4px 12px;height:28px;font-size:11.5px;font-weight:700;">✓ Accept Task</button>
+          <button type="button" class="danger btn-sm" id="btn-decline-${t.id}" onclick="confirmDeclineTask(${t.id}, '${safeTitle}')" style="padding:4px 12px;height:28px;font-size:11.5px;">✕ Decline</button>
+        </div>
+      ` : ''}
+      ${isMine && isDeclined ? `
+        <div style="margin:6px 0 4px 24px;display:flex;gap:6px;align-items:center;">
+          <span style="font-size:11px;color:var(--danger);font-weight:600;">Declined</span>
+          <button type="button" class="btn-sm" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})" style="font-size:11px;padding:2px 8px;height:24px;">✓ Re-accept</button>
+        </div>
+      ` : ''}
+      ${(isAdmin() || (isMine && isAccepted)) ? `
+        <div style="margin:6px 0 2px 24px;display:flex;align-items:center;gap:6px;">
+          <span style="font-size:11px;color:var(--text-muted);font-weight:600;">Status:</span>
+          <select style="font-size:11.5px;padding:2px 6px;height:24px;border-radius:4px;border:1px solid var(--border);" onchange="updateTaskStatus(${t.id}, this.value)">
+            ${["Pending", "In Progress", "Completed", "On Hold"].map((s) => `<option value="${s}" ${s === t.status ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      ` : ''}
+      <div id="task-error-${t.id}" class="task-inline-error hidden" style="margin:4px 0 0 24px;"></div>
+    </div>
+  `;
+}
+
 async function renderTasks() {
   renderTaskToolbar();
-  let url = "/tasks?";
-  if (taskFilter.status) url += "status=" + encodeURIComponent(taskFilter.status) + "&";
-  if (taskFilter.member_id) url += "member_id=" + taskFilter.member_id + "&";
-  window.__taskCache = await api(url);
-  const list = window.__taskCache;
-  if (!list.length) {
-    document.getElementById("taskList").innerHTML = `<p class="small" style="padding:16px 0;">No tasks found.</p>`;
+  
+  // Fetch all tasks
+  window.__taskCache = await api("/tasks");
+  const allTasks = window.__taskCache || [];
+  const q = (taskSearchQuery || "").toLowerCase().trim();
+
+  // Helper to match task
+  const matchQuery = (t) => {
+    if (!q) return true;
+    const inTitle = (t.title || "").toLowerCase().includes(q);
+    const inDesc = (t.description || "").toLowerCase().includes(q);
+    const inMember = (t.member_name || "").toLowerCase().includes(q);
+    const inAbbr = (t.project_abbr || "").toLowerCase().includes(q);
+    const inNo = (t.project_no || "").toLowerCase().includes(q);
+    return inTitle || inDesc || inMember || inAbbr || inNo;
+  };
+
+  // Filter Completed Tasks
+  const completedTasks = allTasks.filter((t) => {
+    if (t.status !== "Completed") return false;
+    if (taskPersonFilter && String(t.assigned_to) !== String(taskPersonFilter)) return false;
+    return matchQuery(t);
+  });
+
+  const compBadge = document.getElementById("completedCountBadge");
+  if (compBadge) compBadge.textContent = completedTasks.length;
+
+  const compList = document.getElementById("completedList");
+  if (compList) {
+    if (!completedTasks.length) {
+      compList.innerHTML = `<div class="empty">No completed tasks yet.</div>`;
+    } else {
+      compList.innerHTML = completedTasks.map((t) => `
+        <div class="completed-row">
+          <span style="color:var(--success);font-weight:bold;font-size:14px;text-align:center;">✓</span>
+          <div class="strike" title="${E(t.title)}">${E(t.title)}</div>
+          <div class="completed-proj" title="${E(t.project_abbr || '')}">📁 ${E(t.project_abbr || (t.project_no ? t.project_no : 'General'))}</div>
+          <div class="completed-person" title="${E(t.member_name)}">👤 ${E(t.member_name)}</div>
+          <div style="display:inline-flex;gap:6px;justify-content:flex-end;">
+            <button class="btn-sm" onclick="undoCompletedTask(${t.id})" title="Undo / Re-open task" style="font-size:11px;padding:2px 8px;height:24px;">↶ Undo</button>
+            ${isAdmin() ? `<button class="danger btn-sm" onclick="deleteTask(${t.id})" title="Delete task" style="font-size:11px;padding:2px 6px;height:24px;">✕</button>` : ''}
+          </div>
+        </div>
+      `).join("");
+    }
+  }
+
+  // Filter Tasks for Project Grid
+  const filteredTasks = allTasks.filter((t) => {
+    if (taskPersonFilter && String(t.assigned_to) !== String(taskPersonFilter)) return false;
+    if (!matchQuery(t)) return false;
+    
+    if (taskViewFilter === "open") {
+      return t.status !== "Completed";
+    } else if (taskViewFilter === "overdue") {
+      return t.status !== "Completed" && t.due_date && new Date(t.due_date) < new Date(new Date().toDateString());
+    } else if (taskViewFilter === "important") {
+      return t.importance === "High";
+    }
+    // 'all' includes both open and completed
+    return true;
+  });
+
+  // Prepare visible projects
+  if (!projects || !projects.length) await loadProjects();
+
+  let visibleProjects = isAdmin()
+    ? [...projects]
+    : projects.filter((p) => {
+        const isMember = (p.members || []).some((m) => m.id === ME.member_id);
+        const hasTask = allTasks.some((t) => t.project_id === p.id && String(t.assigned_to) === String(ME.member_id));
+        return isMember || hasTask;
+      });
+
+  // Apply saved project order
+  if (projectOrder && projectOrder.length) {
+    const orderMap = new Map(projectOrder.map((id, idx) => [id, idx]));
+    visibleProjects.sort((a, b) => {
+      const idxA = orderMap.has(a.id) ? orderMap.get(a.id) : 9999;
+      const idxB = orderMap.has(b.id) ? orderMap.get(b.id) : 9999;
+      return idxA - idxB;
+    });
+  }
+
+  // If searching, also include projects where project name/no/abbr matches query or has matching tasks
+  if (q) {
+    visibleProjects = visibleProjects.filter((p) => {
+      const matchProjName = (p.name || "").toLowerCase().includes(q) || (p.abbr || "").toLowerCase().includes(q) || (p.project_no || "").toLowerCase().includes(q);
+      const hasMatchingTasks = filteredTasks.some((t) => t.project_id === p.id);
+      return matchProjName || hasMatchingTasks;
+    });
+  }
+
+  const gridEl = document.getElementById("projectGrid");
+  if (!gridEl) return;
+
+  if (!visibleProjects.length && !filteredTasks.some((t) => !t.project_id)) {
+    gridEl.innerHTML = `<div class="empty" style="grid-column:1/-1;padding:32px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);">No projects match your current filters.</div>`;
     return;
   }
-  document.getElementById("taskList").innerHTML = list.map((t) => renderTaskCardHtml(t, { inMyDay: false })).join("");
+
+  let gridHtml = "";
+
+  // Render each project card
+  visibleProjects.forEach((p) => {
+    const projTasks = filteredTasks.filter((t) => t.project_id === p.id);
+    const openCount = projTasks.filter((t) => t.status !== "Completed").length;
+
+    gridHtml += `
+      <div class="project-card" draggable="true" data-project-id="${p.id}"
+           ondragstart="onProjectDragStart(event, ${p.id})"
+           ondragover="onProjectDragOver(event)"
+           ondragleave="onProjectDragLeave(event)"
+           ondrop="onProjectDrop(event, ${p.id})"
+           ondragend="onProjectDragEnd(event)">
+        <div class="project-head">
+          <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
+            <span class="project-drag-handle" title="Drag to reorder">☰</span>
+            <h3 title="${E(p.name)}">${E(p.project_no ? p.project_no + ' · ' : '')}${E(p.abbr || p.name)}</h3>
+            <span class="count">${openCount}</span>
+          </div>
+          <div class="project-head-actions">
+            ${isAdmin() ? `
+              <button type="button" class="btn-head" onclick="renameProject(${p.id}, '${E(p.name).replace(/'/g, "\\'")}')" title="Rename project">✎ Rename</button>
+              <button type="button" class="btn-head plus" onclick="openTaskForProject(${p.id})" title="Add task to ${E(p.abbr || p.name)}">+</button>
+            ` : ''}
+          </div>
+        </div>
+        <div class="task-list">
+          ${projTasks.length ? projTasks.map((t) => renderMasterDashboardTaskHtml(t)).join("") : `<div class="empty">No open tasks</div>`}
+        </div>
+      </div>
+    `;
+  });
+
+  // Check for tasks with no project assigned
+  const unassignedTasks = filteredTasks.filter((t) => !t.project_id);
+  if (unassignedTasks.length) {
+    const unassignedOpenCount = unassignedTasks.filter((t) => t.status !== "Completed").length;
+    gridHtml += `
+      <div class="project-card" data-project-id="0">
+        <div class="project-head">
+          <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
+            <h3>General Tasks</h3>
+            <span class="count">${unassignedOpenCount}</span>
+          </div>
+          <div class="project-head-actions">
+            ${isAdmin() ? `<button type="button" class="btn-head plus" onclick="openTask()" title="Add general task">+</button>` : ''}
+          </div>
+        </div>
+        <div class="task-list">
+          ${unassignedTasks.map((t) => renderMasterDashboardTaskHtml(t)).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  gridEl.innerHTML = gridHtml;
 }
 
 function acceptanceBadge(t) {
@@ -2505,6 +2856,10 @@ Object.assign(window, {
   renderClients, exportClients, openClient, saveClient, removeClient,
   editRates, saveRates, renderSummary, exportSummary,
   renderTaskToolbar, updateTaskStatus, deleteTask, openTask, saveTask,
+  onTaskPersonFilter, onTaskViewFilter, onTaskSearchInput,
+  onProjectDragStart, onProjectDragOver, onProjectDragLeave, onProjectDragEnd, onProjectDrop,
+  renameProject, submitRenameProject, openTaskForProject,
+  toggleTaskComplete, toggleTaskStar, undoCompletedTask,
   renderTasks, acceptanceBadge, acceptTask, confirmDeclineTask, submitDeclineTask, renderPerformance,
   renderTeam, exportTeam, openMemberDlg, saveMember, removeMember,
   dragStart, dropOn, renderUsers, exportUsers, toggleUserMember,
