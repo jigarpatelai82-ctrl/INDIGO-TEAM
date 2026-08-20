@@ -488,6 +488,19 @@
     .badge-active { background: var(--success-soft); color: var(--success-soft-text); border: 1px solid var(--success-border); }
     .badge-inactive { background: var(--surface-secondary); color: var(--text-muted); border: 1px solid var(--border); }
     .badge-declined { background: var(--danger-soft); color: var(--danger-soft-text); border: 1px solid var(--danger-border); }
+    .badge-completed { background: rgba(34, 197, 94, 0.15); color: #16a34a; border: 1px solid rgba(34, 197, 94, 0.35); font-weight: 700; }
+    [data-theme="dark"] .badge-completed, [data-theme="slate"] .badge-completed { color: #86efac; border-color: rgba(34, 197, 94, 0.4); }
+    .badge-inprogress { background: var(--primary-soft); color: var(--primary); border: 1px solid var(--primary-border); }
+    .badge-onhold { background: var(--warning-soft); color: var(--warning-soft-text); border: 1px solid var(--warning-border); }
+    .badge-pending { background: var(--surface-secondary); color: var(--text-muted); border: 1px solid var(--border); }
+    .completed-task-banner {
+      display: flex; align-items: center; gap: 8px; background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.35); color: #16a34a; padding: 8px 14px;
+      border-radius: var(--radius); font-weight: 600; font-size: 13px; margin: 10px 0 6px 0;
+    }
+    [data-theme="dark"] .completed-task-banner, [data-theme="slate"] .completed-task-banner {
+      color: #86efac; border-color: rgba(34, 197, 94, 0.4);
+    }
     .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
     .pill { display: inline-block; padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
@@ -1573,6 +1586,15 @@
           <label>Due Date</label>
           <input type="date" id="tDue">
         </div>
+      </div>
+      <div class="form-group" id="tStatusWrap">
+        <label>Status</label>
+        <select id="tStatus">
+          <option value="Pending">Pending</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Completed">Completed</option>
+          <option value="On Hold">On Hold</option>
+        </select>
       </div>
     </div>
     <div class="dialog-actions">

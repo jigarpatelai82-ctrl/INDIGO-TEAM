@@ -379,9 +379,24 @@ function isTaskAssignedToMe(t) {
   return false;
 }
 
+function statusBadge(t) {
+  const s = t.status || "Pending";
+  if (s === "Completed") {
+    return `<span class="badge badge-completed" title="Task is completed"><span class="badge-dot"></span>Completed</span>`;
+  }
+  if (s === "In Progress") {
+    return `<span class="badge badge-inprogress" title="In Progress"><span class="badge-dot"></span>In Progress</span>`;
+  }
+  if (s === "On Hold") {
+    return `<span class="badge badge-onhold" title="On Hold"><span class="badge-dot"></span>On Hold</span>`;
+  }
+  return `<span class="badge badge-pending" title="Pending"><span class="badge-dot"></span>Pending</span>`;
+}
+
 function renderTaskCardHtml(t, options = {}) {
   const inMyDay = Boolean(options.inMyDay);
-  const overdue = t.due_date && t.status !== "Completed" && new Date(t.due_date) < new Date(new Date().toDateString());
+  const isCompleted = t.status === "Completed";
+  const overdue = !isCompleted && t.due_date && new Date(t.due_date) < new Date(new Date().toDateString());
   const eff = t.efficiency_pct;
   const isMine = isTaskAssignedToMe(t);
   const isAwaiting = !t.accepted_at && !t.declined_at && t.acceptance_status !== "accepted" && t.acceptance_status !== "declined";
@@ -389,27 +404,35 @@ function renderTaskCardHtml(t, options = {}) {
   const isDeclined = Boolean(t.declined_at) || t.acceptance_status === "declined";
   const safeTitle = E(t.title || "").replace(/'/g, "\\'");
 
-  return `<div class="taskcard prio${t.priority}">
+  return `<div class="taskcard prio${t.priority}${isCompleted ? ' completed-card' : ''}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px;">
       <div>
         <b style="font-size:15px;color:var(--text);">${E(t.title)}</b>
         ${t.description ? `<div class="small" style="margin-top:4px;color:var(--text-muted);">${E(t.description)}</div>` : ""}
       </div>
-      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+        ${statusBadge(t)}
         ${acceptanceBadge(t)}
         <span class="pill ${impClass[t.importance] || 'impMedium'}">${E(t.importance)}</span>
       </div>
     </div>
+    ${isCompleted ? `
+      <div class="completed-task-banner">
+        <span style="font-size:15px;">✓</span>
+        <span><strong>Task is completed</strong>${t.completed_at ? ` · Completed on ${fmtDateTime(t.completed_at)}` : ""}</span>
+      </div>
+    ` : ""}
     <div class="meta" style="margin:10px 0 14px 0;">
       <span>👤 ${E(t.member_name)}</span>
       ${t.project_abbr ? `<span>📁 ${t.project_no ? E(t.project_no) + " · " : ""}${E(t.project_abbr)}</span>` : ""}
       <span>Priority ${t.priority}</span>
       ${isAdmin() ? `<span>Est: ${t.estimated_hours || 0}h · Actual: ${t.actual_hours || 0}h${eff !== null ? ` · Efficiency: ${eff.toFixed(0)}%` : ""}</span>` : ""}
-      ${t.due_date ? `<span style="${overdue ? "color:var(--danger);font-weight:bold" : ""}">Due ${fmtDateOnly(t.due_date)}${overdue ? " (overdue)" : ""}</span>` : ""}
+      ${t.due_date ? `<span style="${overdue ? "color:var(--danger);font-weight:bold" : ""}">${overdue ? "⚠️ Overdue: " : "Due "}${fmtDateOnly(t.due_date)}</span>` : ""}
       ${t.accepted_at ? `<span style="color:var(--success);font-weight:600;">✓ Accepted: ${fmtDateTime(t.accepted_at)}</span>` : ""}
       ${t.declined_at ? `<span style="color:var(--danger);font-weight:600;">✕ Declined: ${fmtDateTime(t.declined_at)}</span>` : ""}
+      ${isCompleted ? `<span style="color:var(--success);font-weight:700;">✓ Completed${t.completed_at ? `: ${fmtDateTime(t.completed_at)}` : ""}</span>` : ""}
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       ${isMine && isAwaiting ? `
         <div style="display:inline-flex;gap:8px;align-items:center;">
           <button class="primary" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})" style="display:inline-flex;align-items:center;gap:6px;font-weight:600;padding:8px 16px;">✓ Accept Task</button>
@@ -421,11 +444,12 @@ function renderTaskCardHtml(t, options = {}) {
         <button class="btn-sm" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})">✓ Re-accept Task</button>
       ` : ""}
       ${(isAdmin() || (isMine && isAccepted)) ? `
-        <div style="display:inline-flex;align-items:center;gap:6px;">
+        <div style="display:inline-flex;align-items:center;gap:8px;">
           <span class="small" style="font-weight:600;color:var(--text-muted);">Status:</span>
-          <select onchange="updateTaskStatus(${t.id}, this.value)${inMyDay ? '; renderMyDay()' : ''}">
-            ${["Pending", "In Progress", "Completed", "On Hold"].map((s) => `<option ${s === t.status ? "selected" : ""}>${s}</option>`).join("")}
+          <select id="task-select-${t.id}" onchange="updateTaskStatus(${t.id}, this.value)${inMyDay ? '; renderMyDay()' : ''}" style="${isCompleted ? 'border-color:rgba(34, 197, 94, 0.5);font-weight:600;color:var(--success);' : ''}">
+            ${["Pending", "In Progress", "Completed", "On Hold"].map((s) => `<option value="${s}" ${s === t.status ? "selected" : ""}>${s}</option>`).join("")}
           </select>
+          ${isCompleted ? `<span class="small" style="color:var(--success);font-weight:700;display:inline-flex;align-items:center;gap:4px;">✓ Task is completed</span>` : ""}
         </div>
       ` : ""}
       ${isAdmin() ? `
@@ -1969,19 +1993,42 @@ __tableRerender.summary = renderSummary;
 // Tasks
 let taskFilter = { status: "", member_id: "" };
 function renderTaskToolbar() {
-  const memberOpts = isAdmin() ? `<option value="">All Team Members</option>` + members.map((m) => `<option value="${m.id}">${E(m.name)}</option>`).join("") : "";
+  const memberOpts = isAdmin() ? `<option value="">All Team Members</option>` + members.map((m) => `<option value="${m.id}" ${String(taskFilter.member_id) === String(m.id) ? "selected" : ""}>${E(m.name)}</option>`).join("") : "";
   document.getElementById("taskToolbar").innerHTML = `
     ${isAdmin() ? `<button class="primary" onclick="openTask()">+ Assign Task</button>
     <select onchange="taskFilter.member_id=this.value;renderTasks()">${memberOpts}</select>` : ``}
     <select onchange="taskFilter.status=this.value;renderTasks()">
-      <option value="">All Statuses</option><option>Pending</option><option>In Progress</option><option>Completed</option><option>On Hold</option>
+      <option value="" ${taskFilter.status === "" ? "selected" : ""}>All Statuses</option>
+      <option value="Pending" ${taskFilter.status === "Pending" ? "selected" : ""}>Pending</option>
+      <option value="In Progress" ${taskFilter.status === "In Progress" ? "selected" : ""}>In Progress</option>
+      <option value="Completed" ${taskFilter.status === "Completed" ? "selected" : ""}>Completed</option>
+      <option value="On Hold" ${taskFilter.status === "On Hold" ? "selected" : ""}>On Hold</option>
     </select>`;
 }
 
 const impClass = { High: "impHigh", Medium: "impMedium", Low: "impLow" };
 async function updateTaskStatus(id, status) {
-  await api("/tasks/" + id, { method: "PUT", body: { status } });
-  renderTasks();
+  const errEl = document.getElementById(`task-error-${id}`);
+  if (errEl) {
+    errEl.classList.add("hidden");
+    errEl.textContent = "";
+  }
+  try {
+    await api("/tasks/" + id, { method: "PUT", body: { status } });
+    if (activeTab === "myday") {
+      await renderMyDay();
+    } else {
+      await renderTasks();
+    }
+  } catch (err) {
+    console.error("Update task status error:", err);
+    if (errEl) {
+      errEl.textContent = err.message || "Failed to update task status";
+      errEl.classList.remove("hidden");
+    } else {
+      alert(err.message || "Failed to update task status");
+    }
+  }
 }
 async function deleteTask(id) {
   if (!confirm("Delete this task?")) return;
@@ -2006,6 +2053,8 @@ function openTask(id) {
     document.getElementById("tImportance").value = t.importance;
     document.getElementById("tEst").value = t.estimated_hours || "";
     document.getElementById("tDue").value = t.due_date || "";
+    const stEl = document.getElementById("tStatus");
+    if (stEl) stEl.value = t.status || "Pending";
   } else {
     document.getElementById("tTitle").value = "";
     document.getElementById("tDesc").value = "";
@@ -2013,6 +2062,8 @@ function openTask(id) {
     document.getElementById("tImportance").value = "Medium";
     document.getElementById("tEst").value = "";
     document.getElementById("tDue").value = "";
+    const stEl = document.getElementById("tStatus");
+    if (stEl) stEl.value = "Pending";
   }
   taskDlg.showModal();
 }
@@ -2028,6 +2079,7 @@ async function saveTask() {
     importance: document.getElementById("tImportance").value,
     estimated_hours: +document.getElementById("tEst").value || 0,
     due_date: document.getElementById("tDue").value || null,
+    status: document.getElementById("tStatus")?.value || "Pending",
   };
   const errEl = document.getElementById("taskErr");
   if (!body.title) {

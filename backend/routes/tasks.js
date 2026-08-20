@@ -148,7 +148,8 @@ router.put("/:id", authRequired, async (req, res) => {
     const t = rows[0];
     if (!t) return res.status(404).json({ error: "Task not found" });
 
-    const isOwner = String(req.user.member_id) === String(t.assigned_to);
+    const effectiveMemberId = await resolveUserMemberId(req.user);
+    const isOwner = effectiveMemberId && String(effectiveMemberId) === String(t.assigned_to);
     if (req.user.role !== "admin" && !isOwner) {
       return res.status(403).json({ error: "Unauthorized to modify this task" });
     }
@@ -166,17 +167,17 @@ router.put("/:id", authRequired, async (req, res) => {
         assigned_to,
       } = req.body || {};
 
-      const newStatus = status ?? t.status;
-      await db.query(
+      const newStatus = status !== undefined ? status : t.status;
+      const updated = await db.query(
         `UPDATE tasks
          SET title = $1, description = $2, project_id = $3, priority = $4, importance = $5,
              estimated_hours = $6, due_date = $7, status = $8, assigned_to = $9,
              completed_at = CASE
-               WHEN $8 = 'Completed' AND status != 'Completed' THEN NOW()
-               WHEN $8 != 'Completed' THEN NULL
-               ELSE completed_at
+               WHEN $8 = 'Completed' THEN COALESCE(completed_at, NOW())
+               ELSE NULL
              END
-         WHERE id = $10`,
+         WHERE id = $10
+         RETURNING *`,
         [
           title !== undefined ? title.trim() : t.title,
           description !== undefined ? description : t.description,
@@ -190,20 +191,21 @@ router.put("/:id", authRequired, async (req, res) => {
           t.id,
         ]
       );
+      res.json({ ok: true, task: updated.rows[0] });
     } else {
       const { status } = req.body || {};
       if (!status) return res.status(400).json({ error: "Status is required" });
 
-      await db.query(
+      const updated = await db.query(
         `UPDATE tasks
          SET status = $1,
-             completed_at = CASE WHEN $1 = 'Completed' THEN NOW() ELSE NULL END
-         WHERE id = $2`,
+             completed_at = CASE WHEN $1 = 'Completed' THEN COALESCE(completed_at, NOW()) ELSE NULL END
+         WHERE id = $2
+         RETURNING *`,
         [status, t.id]
       );
+      res.json({ ok: true, task: updated.rows[0] });
     }
-
-    res.json({ ok: true });
   } catch (err) {
     console.error("Update task error:", err);
     res.status(500).json({ error: "Failed to update task" });
