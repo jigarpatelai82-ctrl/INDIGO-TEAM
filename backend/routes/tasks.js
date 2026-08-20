@@ -127,7 +127,7 @@ router.post("/", authRequired, adminOnly, async (req, res) => {
         assigned_to,
         req.user.id,
         project_id || null,
-        priority && [1, 2, 3].includes(+priority) ? +priority : 2,
+        priority && [1, 2, 3, 4].includes(+priority) ? +priority : 3,
         importance && ["High", "Medium", "Low"].includes(importance) ? importance : "Medium",
         parseFloat(estimated_hours) || 0,
         due_date || null,
