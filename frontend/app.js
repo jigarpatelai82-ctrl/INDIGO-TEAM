@@ -2406,10 +2406,17 @@ async function renderTasks() {
 
   let gridHtml = "";
 
+  // Helper to determine if a task is open/pending (excluding completed and declined/rejected)
+  const isPendingTask = (t) => {
+    if (t.status === "Completed" || t.status === "Cancelled" || t.status === "Rejected") return false;
+    if (t.declined_at || t.acceptance_status === "declined") return false;
+    return true;
+  };
+
   // Render each project card
   visibleProjects.forEach((p) => {
     const projTasks = filteredTasks.filter((t) => t.project_id === p.id);
-    const openCount = projTasks.filter((t) => t.status !== "Completed").length;
+    const pendingCount = projTasks.filter(isPendingTask).length;
 
     gridHtml += `
       <div class="project-card" draggable="true" data-project-id="${p.id}"
@@ -2419,10 +2426,12 @@ async function renderTasks() {
            ondrop="onProjectDrop(event, ${p.id})"
            ondragend="onProjectDragEnd(event)">
         <div class="project-head">
-          <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
-            <span class="project-drag-handle" title="Drag to reorder">☰</span>
-            <h3 title="${E(p.name)}">${E(p.project_no ? p.project_no + ' · ' : '')}${E(p.abbr || p.name)}</h3>
-            <span class="count">${openCount}</span>
+          <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;flex:1;">
+            <span class="project-drag-handle" title="Drag to reorder" style="margin-top:2px;">☰</span>
+            <div style="min-width:0;flex:1;">
+              <h3 class="project-head-title" title="${E(p.name)}">${E(p.project_no ? p.project_no + ' · ' : '')}${E(p.abbr || p.name)}</h3>
+              <div class="project-task-summary">Task: ${pendingCount} Pending</div>
+            </div>
           </div>
           <div class="project-head-actions">
             ${isAdmin() ? `
@@ -2441,13 +2450,15 @@ async function renderTasks() {
   // Check for tasks with no project assigned
   const unassignedTasks = filteredTasks.filter((t) => !t.project_id);
   if (unassignedTasks.length) {
-    const unassignedOpenCount = unassignedTasks.filter((t) => t.status !== "Completed").length;
+    const unassignedPendingCount = unassignedTasks.filter(isPendingTask).length;
     gridHtml += `
       <div class="project-card" data-project-id="0">
         <div class="project-head">
-          <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
-            <h3>General Tasks</h3>
-            <span class="count">${unassignedOpenCount}</span>
+          <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;flex:1;">
+            <div style="min-width:0;flex:1;">
+              <h3 class="project-head-title">General Tasks</h3>
+              <div class="project-task-summary">Task: ${unassignedPendingCount} Pending</div>
+            </div>
           </div>
           <div class="project-head-actions">
             ${isAdmin() ? `<button type="button" class="btn-head plus" onclick="openTask()" title="Add general task">+</button>` : ''}
