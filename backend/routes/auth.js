@@ -39,6 +39,21 @@ router.post("/login", async (req, res) => {
     if (user.member_id) {
       const m = await db.query("SELECT id, name FROM members WHERE id = $1", [user.member_id]);
       member = m.rows[0] || null;
+    } else {
+      // Auto-resolve linked member by username, email, or exact/partial name
+      const m = await db.query(
+        `SELECT id, name FROM members 
+         WHERE LOWER(name) = LOWER($1) 
+            OR LOWER(name) LIKE LOWER($1 || '%') 
+            OR (email IS NOT NULL AND email != '' AND LOWER(email) = LOWER($2))
+         ORDER BY id ASC LIMIT 1`,
+        [user.username, user.email || ""]
+      );
+      if (m.rows[0]) {
+        member = m.rows[0];
+        user.member_id = member.id;
+        await db.query("UPDATE users SET member_id = $1 WHERE id = $2", [member.id, user.id]);
+      }
     }
 
     const token = jwt.sign(
@@ -115,6 +130,20 @@ router.get("/me", authRequired, async (req, res) => {
     if (user.member_id) {
       const m = await db.query("SELECT id, name FROM members WHERE id = $1", [user.member_id]);
       member = m.rows[0] || null;
+    } else {
+      const m = await db.query(
+        `SELECT id, name FROM members 
+         WHERE LOWER(name) = LOWER($1) 
+            OR LOWER(name) LIKE LOWER($1 || '%') 
+            OR (email IS NOT NULL AND email != '' AND LOWER(email) = LOWER($2))
+         ORDER BY id ASC LIMIT 1`,
+        [user.username, user.email || ""]
+      );
+      if (m.rows[0]) {
+        member = m.rows[0];
+        user.member_id = member.id;
+        await db.query("UPDATE users SET member_id = $1 WHERE id = $2", [member.id, user.id]);
+      }
     }
 
     res.json({ ...user, member_name: member?.name || null });

@@ -321,6 +321,15 @@ async function boot() {
   initTheme();
   document.getElementById("loginScreen").classList.add("hidden");
   document.getElementById("appRoot").classList.remove("hidden");
+
+  try {
+    const freshMe = await api("/auth/me");
+    if (freshMe) {
+      ME = { ...ME, ...freshMe };
+      localStorage.setItem("td_me", JSON.stringify(ME));
+    }
+  } catch (e) {}
+
   const displayName = ME.member_name || ME.username;
   document.getElementById("whoami").textContent = displayName;
   const avatarEl = document.getElementById("userAvatar");
@@ -358,6 +367,74 @@ async function refreshNotifBadge() {
       badge.classList.add("hidden");
     }
   } catch (e) {}
+}
+
+function isTaskAssignedToMe(t) {
+  if (isAdmin()) return false;
+  if (!ME || !t) return false;
+  // If the logged in user is an employee, all tasks returned in their employee portal are for them
+  if (ME.role === "employee" || !isAdmin()) return true;
+  if (ME.member_id && String(ME.member_id) === String(t.assigned_to)) return true;
+  if (ME.member_name && t.member_name && ME.member_name.trim().toLowerCase() === t.member_name.trim().toLowerCase()) return true;
+  return false;
+}
+
+function renderTaskCardHtml(t, options = {}) {
+  const inMyDay = Boolean(options.inMyDay);
+  const overdue = t.due_date && t.status !== "Completed" && new Date(t.due_date) < new Date(new Date().toDateString());
+  const eff = t.efficiency_pct;
+  const isMine = isTaskAssignedToMe(t);
+  const isAwaiting = !t.accepted_at && !t.declined_at && t.acceptance_status !== "accepted" && t.acceptance_status !== "declined";
+  const isAccepted = Boolean(t.accepted_at) || t.acceptance_status === "accepted";
+  const isDeclined = Boolean(t.declined_at) || t.acceptance_status === "declined";
+  const safeTitle = E(t.title || "").replace(/'/g, "\\'");
+
+  return `<div class="taskcard prio${t.priority}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px;">
+      <div>
+        <b style="font-size:15px;color:var(--text);">${E(t.title)}</b>
+        ${t.description ? `<div class="small" style="margin-top:4px;color:var(--text-muted);">${E(t.description)}</div>` : ""}
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+        ${acceptanceBadge(t)}
+        <span class="pill ${impClass[t.importance] || 'impMedium'}">${E(t.importance)}</span>
+      </div>
+    </div>
+    <div class="meta" style="margin:10px 0 14px 0;">
+      <span>👤 ${E(t.member_name)}</span>
+      ${t.project_abbr ? `<span>📁 ${t.project_no ? E(t.project_no) + " · " : ""}${E(t.project_abbr)}</span>` : ""}
+      <span>Priority ${t.priority}</span>
+      ${isAdmin() ? `<span>Est: ${t.estimated_hours || 0}h · Actual: ${t.actual_hours || 0}h${eff !== null ? ` · Efficiency: ${eff.toFixed(0)}%` : ""}</span>` : ""}
+      ${t.due_date ? `<span style="${overdue ? "color:var(--danger);font-weight:bold" : ""}">Due ${fmtDateOnly(t.due_date)}${overdue ? " (overdue)" : ""}</span>` : ""}
+      ${t.accepted_at ? `<span style="color:var(--success);font-weight:600;">✓ Accepted: ${fmtDateTime(t.accepted_at)}</span>` : ""}
+      ${t.declined_at ? `<span style="color:var(--danger);font-weight:600;">✕ Declined: ${fmtDateTime(t.declined_at)}</span>` : ""}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      ${isMine && isAwaiting ? `
+        <div style="display:inline-flex;gap:8px;align-items:center;">
+          <button class="primary" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})" style="display:inline-flex;align-items:center;gap:6px;font-weight:600;padding:8px 16px;">✓ Accept Task</button>
+          <button class="danger" id="btn-decline-${t.id}" onclick="confirmDeclineTask(${t.id}, '${safeTitle}')" style="display:inline-flex;align-items:center;gap:6px;font-weight:600;padding:8px 16px;">✕ Decline</button>
+        </div>
+      ` : ""}
+      ${isMine && isDeclined ? `
+        <span class="small" style="color:var(--danger);font-weight:600;">You declined this task</span>
+        <button class="btn-sm" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})">✓ Re-accept Task</button>
+      ` : ""}
+      ${(isAdmin() || (isMine && isAccepted)) ? `
+        <div style="display:inline-flex;align-items:center;gap:6px;">
+          <span class="small" style="font-weight:600;color:var(--text-muted);">Status:</span>
+          <select onchange="updateTaskStatus(${t.id}, this.value)${inMyDay ? '; renderMyDay()' : ''}">
+            ${["Pending", "In Progress", "Completed", "On Hold"].map((s) => `<option ${s === t.status ? "selected" : ""}>${s}</option>`).join("")}
+          </select>
+        </div>
+      ` : ""}
+      ${isAdmin() ? `
+        <button onclick="openTask(${t.id})">Edit</button>
+        <button class="danger" onclick="deleteTask(${t.id})">Delete</button>
+      ` : ""}
+    </div>
+    <div id="task-error-${t.id}" class="task-inline-error hidden"></div>
+  </div>`;
 }
 
 // My Day
@@ -399,7 +476,10 @@ async function renderMyDay() {
       <b style="color:var(--warning-soft-text)">${acceptance.needsAcceptance.length} task${acceptance.needsAcceptance.length > 1 ? "s" : ""} awaiting your acceptance</b>
       ${acceptance.needsAcceptance.map((t) => `<div class="small" style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
         <span>${E(t.title)}${t.project_abbr ? " · " + E(t.project_abbr) : ""}</span>
-        <button class="primary" onclick="acceptTask(${t.id})">✓ Accept</button>
+        <div style="display:flex;gap:6px;">
+          <button class="primary" onclick="acceptTask(${t.id})">✓ Accept Task</button>
+          <button class="danger" onclick="confirmDeclineTask(${t.id}, '${E(t.title).replace(/'/g, "\\'")}')">✕ Decline</button>
+        </div>
       </div>`).join("")}
     </div>`;
   }
@@ -414,67 +494,16 @@ async function renderMyDay() {
     logBtn.classList.add("hidden");
   }
 
-  const url = isAdmin() ? "/tasks?status=" : `/tasks?member_id=${ME.member_id}&status=`;
+  const url = isAdmin() ? "/tasks?status=" : `/tasks?status=`;
   const myTasks = (await api(url)).filter((t) => t.status !== "Completed");
   const dueToday = myTasks.filter((t) => t.due_date === todayStr);
   const upcoming = myTasks.filter((t) => t.due_date !== todayStr).slice(0, 10);
 
-  function taskRow(t) {
-    const overdue = t.due_date && t.status !== "Completed" && new Date(t.due_date) < new Date(new Date().toDateString());
-    const isMine = !isAdmin() && ME && String(ME.member_id) === String(t.assigned_to);
-    const isAwaiting = !t.accepted_at && !t.declined_at;
-    const isAccepted = Boolean(t.accepted_at);
-    const isDeclined = Boolean(t.declined_at);
-
-    return `<div class="taskcard prio${t.priority}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px;">
-        <div>
-          <b style="font-size:14px;color:var(--text);">${E(t.title)}</b>
-          ${t.description ? `<div class="small" style="margin-top:2px;color:var(--text-muted);">${E(t.description)}</div>` : ""}
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
-          ${acceptanceBadge(t)}
-          <span class="pill ${impClass[t.importance] || 'impMedium'}">${E(t.importance)}</span>
-        </div>
-      </div>
-      <div class="meta" style="margin:8px 0 12px 0;">
-        ${isAdmin() ? `<span>👤 ${E(t.member_name)}</span>` : ""}
-        ${t.project_abbr ? `<span>📁 ${t.project_no ? E(t.project_no) + " · " : ""}${E(t.project_abbr)}</span>` : ""}
-        <span>Priority ${t.priority}</span>
-        ${isAdmin() ? `<span>Est: ${t.estimated_hours || 0}h</span>` : ""}
-        ${t.due_date ? `<span style="${overdue ? "color:var(--danger);font-weight:bold" : ""}">Due ${fmtDateOnly(t.due_date)}</span>` : ""}
-        ${t.accepted_at ? `<span style="color:var(--success);font-weight:600;">✓ Accepted: ${fmtDateTime(t.accepted_at)}</span>` : ""}
-        ${t.declined_at ? `<span style="color:var(--danger);font-weight:600;">✕ Declined: ${fmtDateTime(t.declined_at)}</span>` : ""}
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        ${isMine && isAwaiting ? `
-          <div style="display:inline-flex;gap:8px;align-items:center;">
-            <button class="primary" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})">✓ Accept Task</button>
-            <button class="danger" id="btn-decline-${t.id}" onclick="confirmDeclineTask(${t.id}, '${E(t.title).replace(/'/g, "\\'")}')">Decline</button>
-          </div>
-        ` : ""}
-        ${isMine && isDeclined ? `
-          <span class="small" style="color:var(--danger);font-weight:600;">You declined this task</span>
-          <button class="btn-sm" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})">✓ Re-accept Task</button>
-        ` : ""}
-        ${(isAdmin() || (isMine && isAccepted)) ? `
-          <div style="display:inline-flex;align-items:center;gap:6px;">
-            <span class="small" style="font-weight:600;color:var(--text-muted);">Status:</span>
-            <select onchange="updateTaskStatus(${t.id}, this.value); renderMyDay()">
-              ${["Pending", "In Progress", "Completed", "On Hold"].map((s) => `<option ${s === t.status ? "selected" : ""}>${s}</option>`).join("")}
-            </select>
-          </div>
-        ` : ""}
-      </div>
-      <div id="task-error-${t.id}" class="task-inline-error hidden"></div>
-    </div>`;
-  }
-
   document.getElementById("mydayTasks").innerHTML = `
     <h4>Due Today${dueToday.length ? ` (${dueToday.length})` : ""}</h4>
-    ${dueToday.length ? dueToday.map(taskRow).join("") : `<p class="small">Nothing due today.</p>`}
+    ${dueToday.length ? dueToday.map((t) => renderTaskCardHtml(t, { inMyDay: true })).join("") : `<p class="small">Nothing due today.</p>`}
     <h4 style="margin-top:16px">Other Open Tasks</h4>
-    ${upcoming.length ? upcoming.map(taskRow).join("") : `<p class="small">Nothing else open.</p>`}
+    ${upcoming.length ? upcoming.map((t) => renderTaskCardHtml(t, { inMyDay: true })).join("") : `<p class="small">Nothing else open.</p>`}
   `;
 }
 
@@ -2028,61 +2057,7 @@ async function renderTasks() {
     document.getElementById("taskList").innerHTML = `<p class="small" style="padding:16px 0;">No tasks found.</p>`;
     return;
   }
-  document.getElementById("taskList").innerHTML = list.map((t) => {
-    const overdue = t.due_date && t.status !== "Completed" && new Date(t.due_date) < new Date(new Date().toDateString());
-    const eff = t.efficiency_pct;
-    const isMine = !isAdmin() && ME && String(ME.member_id) === String(t.assigned_to);
-    const isAwaiting = !t.accepted_at && !t.declined_at;
-    const isAccepted = Boolean(t.accepted_at);
-    const isDeclined = Boolean(t.declined_at);
-
-    return `<div class="taskcard prio${t.priority}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px;">
-        <div>
-          <b style="font-size:15px;color:var(--text);">${E(t.title)}</b>
-          ${t.description ? `<div class="small" style="margin-top:4px;color:var(--text-muted);">${E(t.description)}</div>` : ""}
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
-          ${acceptanceBadge(t)}
-          <span class="pill ${impClass[t.importance] || 'impMedium'}">${E(t.importance)}</span>
-        </div>
-      </div>
-      <div class="meta" style="margin:10px 0 14px 0;">
-        <span>👤 ${E(t.member_name)}</span>
-        ${t.project_abbr ? `<span>📁 ${t.project_no ? E(t.project_no) + " · " : ""}${E(t.project_abbr)}</span>` : ""}
-        <span>Priority ${t.priority}</span>
-        ${isAdmin() ? `<span>Est: ${t.estimated_hours || 0}h · Actual: ${t.actual_hours || 0}h${eff !== null ? ` · Efficiency: ${eff.toFixed(0)}%` : ""}</span>` : ""}
-        ${t.due_date ? `<span style="${overdue ? "color:var(--danger);font-weight:bold" : ""}">Due ${fmtDateOnly(t.due_date)}${overdue ? " (overdue)" : ""}</span>` : ""}
-        ${t.accepted_at ? `<span style="color:var(--success);font-weight:600;">✓ Accepted: ${fmtDateTime(t.accepted_at)}</span>` : ""}
-        ${t.declined_at ? `<span style="color:var(--danger);font-weight:600;">✕ Declined: ${fmtDateTime(t.declined_at)}</span>` : ""}
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        ${isMine && isAwaiting ? `
-          <div style="display:inline-flex;gap:8px;align-items:center;">
-            <button class="primary" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})">✓ Accept Task</button>
-            <button class="danger" id="btn-decline-${t.id}" onclick="confirmDeclineTask(${t.id}, '${E(t.title).replace(/'/g, "\\'")}')">Decline</button>
-          </div>
-        ` : ""}
-        ${isMine && isDeclined ? `
-          <span class="small" style="color:var(--danger);font-weight:600;">You declined this task</span>
-          <button class="btn-sm" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})">✓ Re-accept Task</button>
-        ` : ""}
-        ${(isAdmin() || (isMine && isAccepted)) ? `
-          <div style="display:inline-flex;align-items:center;gap:6px;">
-            <span class="small" style="font-weight:600;color:var(--text-muted);">Status:</span>
-            <select onchange="updateTaskStatus(${t.id}, this.value)">
-              ${["Pending", "In Progress", "Completed", "On Hold"].map((s) => `<option ${s === t.status ? "selected" : ""}>${s}</option>`).join("")}
-            </select>
-          </div>
-        ` : ""}
-        ${isAdmin() ? `
-          <button onclick="openTask(${t.id})">Edit</button>
-          <button class="danger" onclick="deleteTask(${t.id})">Delete</button>
-        ` : ""}
-      </div>
-      <div id="task-error-${t.id}" class="task-inline-error hidden"></div>
-    </div>`;
-  }).join("");
+  document.getElementById("taskList").innerHTML = list.map((t) => renderTaskCardHtml(t, { inMyDay: false })).join("");
 }
 
 function acceptanceBadge(t) {

@@ -17,11 +17,37 @@ function enrichTask(t) {
   return { ...t, efficiency_pct: efficiency, acceptance_status };
 }
 
+// Helper to resolve effective member_id for an authenticated user
+async function resolveUserMemberId(user) {
+  if (user.member_id) return user.member_id;
+  try {
+    const uRes = await db.query("SELECT member_id, username, email FROM users WHERE id = $1", [user.id]);
+    if (uRes.rows[0]?.member_id) return uRes.rows[0].member_id;
+    const m = await db.query(
+      `SELECT id FROM members 
+       WHERE LOWER(name) = LOWER($1) 
+          OR LOWER(name) LIKE LOWER($1 || '%') 
+          OR (email IS NOT NULL AND email != '' AND LOWER(email) = LOWER($2))
+       ORDER BY id ASC LIMIT 1`,
+      [user.username, user.email || ""]
+    );
+    if (m.rows[0]) {
+      await db.query("UPDATE users SET member_id = $1 WHERE id = $2", [m.rows[0].id, user.id]);
+      return m.rows[0].id;
+    }
+  } catch (e) {
+    console.error("Resolve member_id error:", e);
+  }
+  return null;
+}
+
 // GET /api/tasks — list tasks with query filters & auto viewed_at tracking
 router.get("/", authRequired, async (req, res) => {
   let { member_id, status, project_id } = req.query || {};
+  let effectiveMemberId = req.user.member_id;
   if (req.user.role !== "admin") {
-    member_id = req.user.member_id;
+    effectiveMemberId = await resolveUserMemberId(req.user);
+    member_id = effectiveMemberId;
   }
 
   let sql = `
@@ -56,9 +82,9 @@ router.get("/", authRequired, async (req, res) => {
     const { rows } = await db.query(sql, params);
 
     // Auto-mark as viewed the first time the assigned employee inspects their own task list
-    if (req.user.role !== "admin" && req.user.member_id) {
+    if (req.user.role !== "admin" && effectiveMemberId) {
       const unviewed = rows.filter(
-        (t) => !t.viewed_at && String(t.assigned_to) === String(req.user.member_id)
+        (t) => !t.viewed_at && String(t.assigned_to) === String(effectiveMemberId)
       );
       for (const t of unviewed) {
         await db.query("UPDATE tasks SET viewed_at = NOW() WHERE id = $1", [t.id]);
@@ -202,7 +228,8 @@ router.post("/:id/accept", authRequired, async (req, res) => {
     const t = rows[0];
     if (!t) return res.status(404).json({ error: "Task not found" });
 
-    if (req.user.role === "admin" || String(req.user.member_id) !== String(t.assigned_to)) {
+    const effectiveMemberId = await resolveUserMemberId(req.user);
+    if (req.user.role === "admin" || !effectiveMemberId || String(effectiveMemberId) !== String(t.assigned_to)) {
       return res.status(403).json({ error: "Only the assigned employee can accept this task" });
     }
 
@@ -230,7 +257,8 @@ router.post("/:id/decline", authRequired, async (req, res) => {
     const t = rows[0];
     if (!t) return res.status(404).json({ error: "Task not found" });
 
-    if (req.user.role === "admin" || String(req.user.member_id) !== String(t.assigned_to)) {
+    const effectiveMemberId = await resolveUserMemberId(req.user);
+    if (req.user.role === "admin" || !effectiveMemberId || String(effectiveMemberId) !== String(t.assigned_to)) {
       return res.status(403).json({ error: "Only the assigned employee can decline this task" });
     }
 
