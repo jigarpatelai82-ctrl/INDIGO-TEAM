@@ -189,45 +189,8 @@ router.get("/admin", authRequired, adminOnly, async (req, res) => {
   }
 });
 
-// GET /api/timesheets — fetch month entries and days
-router.get("/", authRequired, async (req, res) => {
-  const { month, member_id } = req.query || {};
-  let sql = "SELECT te.*, p.abbr, p.project_no, p.name as project_name FROM timesheet_entries te JOIN projects p ON p.id = te.project_id WHERE 1=1";
-  const params = [];
-
-  if (month) {
-    params.push(`${month}%`);
-    sql += ` AND te.date LIKE $${params.length}`;
-  }
-  if (member_id) {
-    params.push(member_id);
-    sql += ` AND te.member_id = $${params.length}`;
-  }
-
-  try {
-    const entries = (await db.query(sql, params)).rows;
-
-    let daySql = "SELECT * FROM timesheet_days WHERE 1=1";
-    const dayParams = [];
-    if (month) {
-      dayParams.push(`${month}%`);
-      daySql += ` AND date LIKE $${dayParams.length}`;
-    }
-    if (member_id) {
-      dayParams.push(member_id);
-      daySql += ` AND member_id = $${dayParams.length}`;
-    }
-
-    const days = (await db.query(daySql, dayParams)).rows;
-    res.json({ entries, days });
-  } catch (err) {
-    console.error("Fetch timesheets error:", err);
-    res.status(500).json({ error: "Failed to fetch timesheet records" });
-  }
-});
-
-// GET /api/timesheets/monthly — full project-wise monthly timesheet dataset
-router.get("/monthly", authRequired, async (req, res) => {
+// GET /api/timesheets or /api/timesheets/monthly — full project-wise monthly timesheet dataset
+async function getMonthlyTimesheetData(req, res) {
   try {
     const month = req.query.month || new Date().toISOString().slice(0, 7);
     let memberId = req.user.role === "admin" ? (req.query.member_id || req.user.member_id) : req.user.member_id;
@@ -255,7 +218,7 @@ router.get("/monthly", authRequired, async (req, res) => {
       [memberId]
     );
 
-    // Also get projects where member has logged hours in this month (so historical logged hours are visible)
+    // Also get projects where member has logged hours in this month (so historical logged hours are preserved)
     const loggedProjectsRes = await db.query(
       `SELECT DISTINCT p.id, p.project_no, p.name, p.abbr, p.active
        FROM projects p
@@ -318,10 +281,13 @@ router.get("/monthly", authRequired, async (req, res) => {
     console.error("Fetch monthly timesheet error:", err);
     res.status(500).json({ error: "Failed to fetch monthly timesheet" });
   }
-});
+}
 
-// POST /api/timesheets/save-cell — fast single cell autosave
-router.post("/save-cell", authRequired, async (req, res) => {
+router.get("/", authRequired, getMonthlyTimesheetData);
+router.get("/monthly", authRequired, getMonthlyTimesheetData);
+
+// Save individual project date hour cell handler (with strict project assignment verification)
+async function handleSaveTimesheetHour(req, res) {
   let { member_id, project_id, date, hours, narration } = req.body || {};
 
   // Employees can only edit their own hours
@@ -331,8 +297,12 @@ router.post("/save-cell", authRequired, async (req, res) => {
     member_id = req.user.member_id;
   }
 
-  if (!member_id || !project_id || !date) {
-    return res.status(400).json({ error: "member_id, project_id, and date are required" });
+  if (!member_id) {
+    return res.status(400).json({ error: "No team member linked to this user account" });
+  }
+
+  if (!project_id || !date) {
+    return res.status(400).json({ error: "project_id and date are required" });
   }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -342,6 +312,17 @@ router.post("/save-cell", authRequired, async (req, res) => {
   const numHours = parseFloat(hours);
   if (isNaN(numHours) || numHours < 0 || numHours > 24) {
     return res.status(400).json({ error: "Hours must be a number between 0 and 24" });
+  }
+
+  // Security Check: Verify employee is assigned to this project
+  if (req.user.role !== "admin") {
+    const isAssigned = await db.query(
+      "SELECT 1 FROM project_members WHERE project_id = $1 AND member_id = $2",
+      [project_id, member_id]
+    );
+    if (!isAssigned.rows.length) {
+      return res.status(403).json({ error: "Forbidden: You are not assigned to this project." });
+    }
   }
 
   const roundedHours = Math.round(numHours * 100) / 100;
@@ -400,7 +381,13 @@ router.post("/save-cell", authRequired, async (req, res) => {
     console.error("Save timesheet cell error:", err);
     res.status(500).json({ error: "Failed to save timesheet entry" });
   }
-});
+}
+
+// Support PUT, PATCH, and POST for saving individual timesheet hour cells
+router.put("/", authRequired, handleSaveTimesheetHour);
+router.patch("/", authRequired, handleSaveTimesheetHour);
+router.post("/", authRequired, handleSaveTimesheetHour);
+router.post("/save-cell", authRequired, handleSaveTimesheetHour);
 
 // GET /api/timesheets/day — fetch single member day details
 router.get("/day", authRequired, async (req, res) => {
