@@ -542,23 +542,23 @@ async function ackAcceptance(taskId) {
 
 function buildTabs() {
   const tabs = isAdmin() ? [
-    { id: "tasks", label: "✅ Projects & Tasks" },
-    { id: "myday", label: "☀️ My Day" },
-    { id: "cal", label: "🗓️ Whole Month" },
-    { id: "projects", label: "📁 Projects & Budgets" },
-    { id: "admints", label: "🕒 Employee Timesheets" },
-    { id: "summary", label: "📊 Monthly Summary" },
-    { id: "performance", label: "📈 Employee Performance" },
-    { id: "team", label: "👥 Team Management" },
-    { id: "clients", label: "🏢 Clients" },
-    { id: "users", label: "🔑 Access / Logins" },
+    { id: "tasks", icon: "✓", label: "Projects & Tasks" },
+    { id: "myday", icon: "☀️", label: "My Day" },
+    { id: "cal", icon: "▦", label: "Whole Month" },
+    { id: "projects", icon: "📁", label: "Projects & Budgets" },
+    { id: "admints", icon: "🕒", label: "Employee Timesheets" },
+    { id: "summary", icon: "📊", label: "Monthly Summary" },
+    { id: "performance", icon: "📈", label: "Employee Performance" },
+    { id: "team", icon: "👥", label: "Team Management" },
+    { id: "clients", icon: "🏢", label: "Clients" },
+    { id: "users", icon: "🔑", label: "Access / Logins" },
   ] : [
-    { id: "tasks", label: "✅ Projects & Tasks" },
-    { id: "myday", label: "☀️ My Day" },
-    { id: "cal", label: "🗓️ My Timesheet" },
+    { id: "tasks", icon: "✓", label: "Projects & Tasks" },
+    { id: "myday", icon: "☀️", label: "My Day" },
+    { id: "cal", icon: "▦", label: "My Timesheet" },
   ];
   const el = document.getElementById("mainTabs");
-  el.innerHTML = tabs.map((t) => `<button id="btab-${t.id}" onclick="tab('${t.id}')">${t.label}</button>`).join("");
+  el.innerHTML = tabs.map((t) => `<button id="btab-${t.id}" onclick="tab('${t.id}')"><span style="font-size:13.5px;width:18px;display:inline-block;text-align:center;opacity:0.9;">${t.icon}</span><span>${t.label}</span></button>`).join("");
 }
 
 const TAB_META = {
@@ -2443,6 +2443,11 @@ async function renderTasks() {
         <div class="task-list">
           ${projTasks.length ? projTasks.map((t) => renderMasterDashboardTaskHtml(t)).join("") : `<div class="empty">No open tasks</div>`}
         </div>
+        ${isAdmin() ? `
+          <div class="project-card-footer" style="padding: 6px 10px; border-top: 1px solid var(--border-subtle); background: var(--surface); display: flex;">
+            <button type="button" class="btn-sm" onclick="openTaskForProject(${p.id})" style="font-size: 11px; padding: 2px 8px; height: 24px; width: 100%; border-radius: 5px; background: var(--surface-secondary); color: var(--text-muted); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 1px dashed var(--border);">+ Add Task</button>
+          </div>
+        ` : ''}
       </div>
     `;
   });
@@ -2467,6 +2472,11 @@ async function renderTasks() {
         <div class="task-list">
           ${unassignedTasks.map((t) => renderMasterDashboardTaskHtml(t)).join("")}
         </div>
+        ${isAdmin() ? `
+          <div class="project-card-footer" style="padding: 6px 10px; border-top: 1px solid var(--border-subtle); background: var(--surface); display: flex;">
+            <button type="button" class="btn-sm" onclick="openTask()" style="font-size: 11px; padding: 2px 8px; height: 24px; width: 100%; border-radius: 5px; background: var(--surface-secondary); color: var(--text-muted); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 1px dashed var(--border);">+ Add Task</button>
+          </div>
+        ` : ''}
       </div>
     `;
   }
