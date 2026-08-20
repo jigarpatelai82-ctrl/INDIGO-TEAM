@@ -9,7 +9,12 @@ function enrichTask(t) {
     t.estimated_hours > 0 && t.actual_hours > 0
       ? (t.estimated_hours / t.actual_hours) * 100
       : null;
-  return { ...t, efficiency_pct: efficiency };
+  const acceptance_status = t.declined_at
+    ? "declined"
+    : t.accepted_at
+    ? "accepted"
+    : "awaiting";
+  return { ...t, efficiency_pct: efficiency, acceptance_status };
 }
 
 // GET /api/tasks — list tasks with query filters & auto viewed_at tracking
@@ -204,16 +209,45 @@ router.post("/:id/accept", authRequired, async (req, res) => {
     await db.query(
       `UPDATE tasks
        SET accepted_at = NOW(),
+           declined_at = NULL,
            viewed_at = COALESCE(viewed_at, NOW()),
            admin_seen_acceptance = 0
        WHERE id = $1`,
       [t.id]
     );
 
-    res.json({ ok: true });
+    res.json({ ok: true, acceptance_status: "accepted", accepted_at: new Date().toISOString() });
   } catch (err) {
     console.error("Accept task error:", err);
     res.status(500).json({ error: "Failed to accept task" });
+  }
+});
+
+// POST /api/tasks/:id/decline — assigned employee declines task
+router.post("/:id/decline", authRequired, async (req, res) => {
+  try {
+    const { rows } = await db.query("SELECT * FROM tasks WHERE id = $1", [req.params.id]);
+    const t = rows[0];
+    if (!t) return res.status(404).json({ error: "Task not found" });
+
+    if (req.user.role === "admin" || String(req.user.member_id) !== String(t.assigned_to)) {
+      return res.status(403).json({ error: "Only the assigned employee can decline this task" });
+    }
+
+    await db.query(
+      `UPDATE tasks
+       SET declined_at = NOW(),
+           accepted_at = NULL,
+           viewed_at = COALESCE(viewed_at, NOW()),
+           admin_seen_acceptance = 0
+       WHERE id = $1`,
+      [t.id]
+    );
+
+    res.json({ ok: true, acceptance_status: "declined", declined_at: new Date().toISOString() });
+  } catch (err) {
+    console.error("Decline task error:", err);
+    res.status(500).json({ error: "Failed to decline task" });
   }
 });
 

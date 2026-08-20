@@ -49,6 +49,8 @@ async function initSchema() {
   CREATE TABLE IF NOT EXISTS members (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
+    designation TEXT NOT NULL DEFAULT 'Team Member',
+    email TEXT DEFAULT '',
     order_index INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
     rate REAL NOT NULL DEFAULT 0
@@ -158,8 +160,12 @@ async function initSchema() {
   `);
 
   // Migrations for backward compatibility
+  await query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS designation TEXT NOT NULL DEFAULT 'Team Member'`);
+  await query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''`);
+  await query(`ALTER TABLE project_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW()`);
   await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS viewed_at TIMESTAMP`);
   await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP`);
+  await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS declined_at TIMESTAMP`);
   await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS admin_seen_acceptance INTEGER NOT NULL DEFAULT 1`);
   await query(`ALTER TABLE timesheet_entries ADD COLUMN IF NOT EXISTS narration TEXT DEFAULT ''`);
   await query(`ALTER TABLE timesheet_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW()`);

@@ -487,6 +487,7 @@
     .badge-employee { background: var(--surface-secondary); color: var(--text-muted); border: 1px solid var(--border); }
     .badge-active { background: var(--success-soft); color: var(--success-soft-text); border: 1px solid var(--success-border); }
     .badge-inactive { background: var(--surface-secondary); color: var(--text-muted); border: 1px solid var(--border); }
+    .badge-declined { background: var(--danger-soft); color: var(--danger-soft-text); border: 1px solid var(--danger-border); }
     .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
     .pill { display: inline-block; padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
@@ -510,6 +511,10 @@
     .taskcard.prio3 { border-left: 4px solid #3b82f6; }
     .taskcard .meta { display: flex; gap: 16px; font-size: 12.5px; color: var(--text-muted); margin: 8px 0 12px 0; flex-wrap: wrap; }
     .taskcard .small { font-size: 12.5px; color: var(--text-muted); }
+    .task-inline-error {
+      margin-top: 8px; padding: 8px 12px; font-size: 12px; color: var(--danger-soft-text);
+      background: var(--danger-soft); border: 1px solid var(--danger-border); border-radius: var(--radius);
+    }
 
     /* Progress bar */
     .barchart { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
@@ -706,6 +711,91 @@
     .ts-empty-card h4 { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
     .ts-empty-card p { font-size: 13.5px; color: var(--text-muted); max-width: 420px; margin: 0 auto; }
 
+    /* Admin Timesheet Module Specific Styles */
+    .adm-ts-kpi-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px;
+    }
+    .adm-ts-kpi-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 12px 16px; box-shadow: var(--shadow-xs); display: flex; flex-direction: column; gap: 3px;
+    }
+    .adm-ts-kpi-label { font-size: 11px; font-weight: 600; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.03em; }
+    .adm-ts-kpi-val { font-size: 19px; font-weight: 800; color: var(--text); }
+    .adm-ts-kpi-sub { font-size: 11.5px; color: var(--text-muted); }
+
+    .adm-ts-breakdown-box {
+      background: var(--surface); border: 1px solid var(--border-subtle); border-radius: var(--radius);
+      padding: 10px 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .adm-ts-breakdown-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light); }
+    .adm-ts-chips-list { display: flex; gap: 8px; flex-wrap: wrap; }
+    .adm-ts-chip {
+      background: var(--surface-secondary); border: 1px solid var(--border-subtle); border-radius: 16px;
+      padding: 4px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
+      color: var(--text); transition: border-color 0.15s ease;
+    }
+    .adm-ts-chip:hover { border-color: var(--primary); }
+    .adm-ts-chip b { color: var(--primary); font-weight: 700; }
+
+    /* Admin Timesheet Table Columns */
+    .adm-ts-table thead th.adm-col-emp {
+      position: sticky; left: 0; z-index: 32; width: 170px; min-width: 170px; max-width: 190px;
+      background: var(--surface-secondary); text-align: left; padding: 10px 12px; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light);
+    }
+    .adm-ts-table tbody td.adm-col-emp {
+      position: sticky; left: 0; z-index: 16; width: 170px; min-width: 170px; max-width: 190px;
+      background: var(--surface); text-align: left; padding: 10px 12px; font-weight: 600;
+      color: var(--text); border-right: 1px solid var(--border-subtle);
+    }
+    .adm-ts-table thead th.adm-col-prj {
+      position: sticky; left: 170px; z-index: 32; width: 220px; min-width: 220px; max-width: 260px;
+      background: var(--surface-secondary); text-align: left; padding: 10px 12px; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light);
+    }
+    .adm-ts-table tbody td.adm-col-prj {
+      position: sticky; left: 170px; z-index: 16; width: 220px; min-width: 220px; max-width: 260px;
+      background: var(--surface); text-align: left; padding: 10px 12px;
+      border-right: 1px solid var(--border-subtle);
+    }
+    .adm-ts-table thead th.adm-col-prjno {
+      position: sticky; left: 390px; z-index: 32; width: 110px; min-width: 110px; max-width: 125px;
+      background: var(--surface-secondary); text-align: left; padding: 10px 12px; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light);
+      border-right: 2px solid var(--border); box-shadow: 2px 0 6px rgba(0, 0, 0, 0.03);
+    }
+    .adm-ts-table tbody td.adm-col-prjno {
+      position: sticky; left: 390px; z-index: 16; width: 110px; min-width: 110px; max-width: 125px;
+      background: var(--surface); text-align: left; padding: 10px 12px;
+      border-right: 2px solid var(--border); box-shadow: 2px 0 6px rgba(0, 0, 0, 0.03);
+    }
+
+    .adm-ts-table tbody tr:hover td.adm-col-emp,
+    .adm-ts-table tbody tr:hover td.adm-col-prj,
+    .adm-ts-table tbody tr:hover td.adm-col-prjno {
+      background: var(--surface-secondary);
+    }
+
+    .adm-ts-table .ts-row-total td.adm-col-emp {
+      position: sticky; left: 0; z-index: 36; background: var(--surface-secondary) !important;
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text); padding-left: 12px;
+    }
+    .adm-ts-table .ts-row-total td.adm-col-prj {
+      position: sticky; left: 170px; z-index: 36; background: var(--surface-secondary) !important;
+    }
+    .adm-ts-table .ts-row-total td.adm-col-prjno {
+      position: sticky; left: 390px; z-index: 36; background: var(--surface-secondary) !important;
+      border-right: 2px solid var(--border);
+    }
+
+    .adm-cell-val {
+      font-size: 12.5px; font-weight: 500; color: var(--text-light); opacity: 0.4;
+      display: inline-block; width: 100%; text-align: center;
+    }
+    .adm-cell-val.has-val {
+      font-weight: 700; color: var(--primary); opacity: 1;
+    }
+
     /* Modals / Dialogs (Redesigned SaaS Architecture) */
     dialog {
       border: 1px solid var(--border); border-radius: var(--radius-lg);
@@ -739,6 +829,97 @@
       border-top: 1px solid var(--border-subtle); background: var(--surface-secondary);
     }
     
+    /* Searchable Client Selector */
+    .client-select-wrap { position: relative; width: 100%; }
+    .client-select-input-box { display: flex; align-items: center; gap: 8px; width: 100%; }
+    .client-selected-display {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px; background: var(--surface-secondary); border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: 13px; font-weight: 600; color: var(--text);
+    }
+    .client-selected-info { display: flex; align-items: center; gap: 8px; }
+    .client-selected-clear {
+      background: none; border: none; padding: 2px 6px; font-size: 14px;
+      color: var(--text-muted); cursor: pointer; border-radius: 4px; line-height: 1;
+    }
+    .client-selected-clear:hover { color: var(--danger); background: var(--danger-soft); }
+    .client-dropdown-menu {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow-lg); z-index: 100; max-height: 220px; overflow-y: auto;
+    }
+    .client-dropdown-item {
+      padding: 8px 12px; font-size: 13px; color: var(--text); cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-subtle);
+    }
+    .client-dropdown-item:last-child { border-bottom: none; }
+    .client-dropdown-item:hover, .client-dropdown-item.is-selected {
+      background: var(--surface-secondary); color: var(--primary);
+    }
+    .client-dropdown-item-name { font-weight: 600; }
+    .client-dropdown-item-sub { font-size: 11.5px; color: var(--text-muted); }
+    .client-dropdown-add-btn {
+      width: 100%; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 600;
+      color: var(--primary); background: var(--primary-soft); border: none; border-top: 1px solid var(--border);
+      cursor: pointer; display: flex; align-items: center; gap: 6px;
+    }
+    .client-dropdown-add-btn:hover { background: rgba(59, 130, 246, 0.18); }
+
+    /* Searchable Team Member Multi-Select */
+    .member-multi-wrap {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--surface); overflow: hidden;
+    }
+    .member-multi-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px; background: var(--surface-secondary); border-bottom: 1px solid var(--border);
+    }
+    .member-multi-search-input {
+      width: 100%; border: none !important; background: transparent !important;
+      padding: 4px 6px !important; font-size: 13px; box-shadow: none !important;
+    }
+    .member-multi-list {
+      max-height: 180px; overflow-y: auto; padding: 4px 0;
+    }
+    .member-multi-item {
+      display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+      cursor: pointer; transition: background 0.15s ease; border-bottom: 1px solid var(--border-subtle);
+    }
+    .member-multi-item:last-child { border-bottom: none; }
+    .member-multi-item:hover { background: var(--surface-secondary); }
+    .member-multi-item.is-checked { background: rgba(59, 130, 246, 0.06); }
+    .member-multi-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary); flex-shrink: 0; }
+    .member-multi-info { display: flex; flex-direction: column; gap: 1px; flex: 1; }
+    .member-multi-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .member-multi-sub { font-size: 11.5px; color: var(--text-muted); }
+
+    /* Selected Member Cards */
+    .member-selected-container {
+      margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--surface-secondary); padding: 8px 12px;
+    }
+    .member-selected-header {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .member-selected-grid {
+      display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto;
+    }
+    .member-selected-card {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 10px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); transition: border-color 0.15s ease;
+    }
+    .member-selected-card:hover { border-color: var(--primary); }
+    .member-selected-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+    .member-selected-meta { font-size: 11.5px; color: var(--text-muted); }
+    .member-selected-remove {
+      background: none; border: none; padding: 2px 6px; font-size: 15px; font-weight: 700;
+      color: var(--text-muted); cursor: pointer; border-radius: 4px; line-height: 1;
+    }
+    .member-selected-remove:hover { color: var(--danger); background: var(--danger-soft); }
+
     /* Modern Compact Alerts */
     .error-msg {
       color: var(--danger-soft-text); background: var(--danger-soft); border: 1px solid var(--danger-border);
@@ -907,6 +1088,52 @@
         </div>
       </section>
 
+      <!-- TAB: ADMIN EMPLOYEE TIMESHEETS -->
+      <section id="tab-admints" class="hidden">
+        <!-- Toolbar & Month Controls -->
+        <div class="toolbar" style="flex-wrap: wrap; gap: 10px;">
+          <div class="toolbar-left" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <button onclick="moveAdminTsMonth(-1)" title="Previous Month">‹</button>
+            <div id="adminTsMonthTitle" class="month" style="font-weight: 700; font-size: 14px; padding: 0 6px;"></div>
+            <button onclick="moveAdminTsMonth(1)" title="Next Month">›</button>
+            <button onclick="todayAdminTsBtn()">Today</button>
+
+            <div style="height: 20px; width: 1px; background: var(--border); margin: 0 4px;"></div>
+
+            <!-- Employee Filter Dropdown -->
+            <div style="display: inline-flex; align-items: center; gap: 6px;">
+              <span style="font-size: 12px; font-weight: 600; color: var(--text-light);">Employee:</span>
+              <select id="adminTsEmpFilter" onchange="onAdminTsFilterChange()" style="font-size: 12.5px; padding: 5px 10px; height: 32px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text);">
+                <option value="">All Employees</option>
+              </select>
+            </div>
+
+            <!-- Project Filter Dropdown -->
+            <div style="display: inline-flex; align-items: center; gap: 6px;">
+              <span style="font-size: 12px; font-weight: 600; color: var(--text-light);">Project:</span>
+              <select id="adminTsProjFilter" onchange="onAdminTsFilterChange()" style="font-size: 12.5px; padding: 5px 10px; height: 32px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); max-width: 240px;">
+                <option value="">All Projects</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="toolbar-right" style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
+            <button onclick="exportAdminTsCSV()">Export CSV</button>
+          </div>
+        </div>
+
+        <!-- KPI Breakdown Summary Cards -->
+        <div id="adminTsKpiGrid" class="adm-ts-kpi-grid"></div>
+
+        <!-- Employee & Project Breakdown Chips -->
+        <div id="adminTsBreakdowns"></div>
+
+        <!-- Timesheet Matrix Table Container -->
+        <div id="adminTsTableContainer" class="ts-table-container">
+          <table id="adminTsTable" class="ts-sheet-table adm-ts-table"></table>
+        </div>
+      </section>
+
       <!-- TAB: MONTHLY SUMMARY -->
       <section id="tab-summary" class="hidden">
         <div class="toolbar">
@@ -949,8 +1176,7 @@
       <section id="tab-team" class="hidden">
         <div class="toolbar">
           <div class="toolbar-left">
-            <input type="text" id="newName" placeholder="New member name..." onkeydown="if(event.key==='Enter')addMember()">
-            <button class="primary" onclick="addMember()">+ Add Member</button>
+            <button class="primary" onclick="openMemberDlg(null)">+ Add Team Member</button>
           </div>
           <div class="toolbar-right">
             <button onclick="exportTeam('csv')">Export CSV</button>
@@ -1127,10 +1353,32 @@
         <label>Project Name *</label>
         <input type="text" id="pname" placeholder="Full descriptive project name">
       </div>
+      
+      <!-- Searchable Client Selector -->
       <div class="form-group">
-        <label>Client</label>
-        <select id="pclient"></select>
+        <label>Client <span class="opt-tag">Optional</span></label>
+        <div class="client-select-wrap" id="clientSelectWrap">
+          <input type="hidden" id="pclient">
+          <div id="clientSelectedBox" class="client-selected-display hidden">
+            <div class="client-selected-info">
+              <span style="color:var(--primary);font-size:15px;">🏢</span>
+              <span id="clientSelectedName" style="font-weight:600;"></span>
+            </div>
+            <button type="button" class="client-selected-clear" onclick="clearProjectClient(event)" title="Remove client">✕</button>
+          </div>
+          <div id="clientSearchBox" class="client-select-input-box">
+            <input type="text" id="clientSearchInput" placeholder="🔍 Search or select client..." oninput="onClientSearchInput(this.value)" onfocus="openClientDropdown()" autocomplete="off">
+            <button type="button" class="btn-sm" onclick="openClient()" title="Add New Client" style="white-space:nowrap;padding:7px 10px;font-size:12px;">+ Add Client</button>
+          </div>
+          <div id="clientDropdownMenu" class="client-dropdown-menu hidden">
+            <div id="clientDropdownList"></div>
+            <button type="button" class="client-dropdown-add-btn" onclick="openClient()">
+              <span>+ Add New Client</span>
+            </button>
+          </div>
+        </div>
       </div>
+
       <div class="form-row">
         <div class="form-group">
           <label>Project Fee (₹)</label>
@@ -1141,10 +1389,27 @@
           <input type="number" id="pmanual" placeholder="0">
         </div>
       </div>
+
+      <!-- Searchable Multi-Select Team Member Allocation -->
       <div class="form-group">
-        <label>Assigned Team Members</label>
-        <div id="projectMembers" style="max-height: 140px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;"></div>
+        <label>Assigned Team Members <span class="opt-tag">Multiple selection supported</span></label>
+        <div class="member-multi-wrap">
+          <div class="member-multi-header">
+            <input type="text" id="memberSearchInput" class="member-multi-search-input" placeholder="🔍 Search team members..." oninput="onMemberSearchInput(this.value)" autocomplete="off">
+          </div>
+          <div id="projectMemberList" class="member-multi-list"></div>
+        </div>
+        
+        <!-- Selected Members Container -->
+        <div id="projectSelectedMembersWrap" class="member-selected-container hidden">
+          <div class="member-selected-header">
+            <span>Selected Members (<span id="projectSelectedCount">0</span>)</span>
+            <button type="button" style="background:none;border:none;color:var(--primary);font-size:11px;font-weight:600;cursor:pointer;" onclick="clearAllSelectedMembers()">Clear all</button>
+          </div>
+          <div id="projectSelectedList" class="member-selected-grid"></div>
+        </div>
       </div>
+
       <div class="form-group">
         <label>Remarks</label>
         <input type="text" id="prem" placeholder="Notes...">
@@ -1153,6 +1418,47 @@
     <div class="dialog-actions">
       <button type="button" onclick="projectDlg.close()">Cancel</button>
       <button type="button" class="primary" onclick="saveProject()">Save Project</button>
+    </div>
+  </dialog>
+
+  <!-- Team Member Dialog -->
+  <dialog id="memberDlg" style="max-width: 520px;">
+    <div class="dialog-header">
+      <h3 id="memberDlgTitle">Add Team Member</h3>
+      <p>Manage employee name, designation, hourly billing rate, and access status.</p>
+    </div>
+    <div class="dialog-body">
+      <input type="hidden" id="memDlgId">
+      <div id="memDlgErr" class="error-msg hidden"></div>
+      <div class="form-group">
+        <label>Name *</label>
+        <input type="text" id="memDlgName" placeholder="e.g. Jigar Patel">
+      </div>
+      <div class="form-group">
+        <label>Designation *</label>
+        <input type="text" id="memDlgDesignation" placeholder="e.g. Senior Architect">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Man-Hour Rate (₹/hr) *</label>
+          <input type="number" id="memDlgRate" min="0" step="10" placeholder="1500">
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="memDlgActive">
+            <option value="1">Active</option>
+            <option value="0">Inactive</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Email <span class="opt-tag">Optional</span></label>
+        <input type="email" id="memDlgEmail" placeholder="e.g. jigar@company.com">
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" onclick="memberDlg.close()">Cancel</button>
+      <button type="button" class="primary" onclick="saveMember()">Save Team Member</button>
     </div>
   </dialog>
 
@@ -1272,6 +1578,23 @@
     <div class="dialog-actions">
       <button type="button" onclick="taskDlg.close()">Cancel</button>
       <button type="button" class="primary" onclick="saveTask()">Save Task</button>
+    </div>
+  </dialog>
+
+  <!-- Decline Task Confirmation Dialog -->
+  <dialog id="declineTaskDlg" style="max-width: 440px;">
+    <div class="dialog-header">
+      <h3>Decline Task</h3>
+      <p>Are you sure you want to decline this task?</p>
+    </div>
+    <div class="dialog-body">
+      <div id="declineTaskTitle" style="font-weight: 600; color: var(--text); padding: 10px 12px; background: var(--surface-secondary); border-radius: var(--radius); border: 1px solid var(--border); font-size: 13.5px; margin-bottom: 8px;"></div>
+      <p class="small" style="color: var(--text-muted); margin: 0;">Your administrator will be informed that you declined this assignment.</p>
+      <div id="declineTaskErr" class="error-msg hidden" style="margin-top: 10px;"></div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" id="btnCancelDecline" onclick="declineTaskDlg.close()">Cancel</button>
+      <button type="button" id="btnConfirmDecline" class="danger" onclick="submitDeclineTask()">Decline Task</button>
     </div>
   </dialog>
 

@@ -4,12 +4,14 @@ const db = require("../db");
 const { authRequired, adminOnly } = require("../middleware/auth");
 const router = express.Router();
 
-// GET /api/members — list active team members
+// GET /api/members — list active team members (or all if admin requested)
 router.get("/", authRequired, async (req, res) => {
   try {
-    const { rows } = await db.query(
-      "SELECT id, name, order_index, active, rate FROM members WHERE active = 1 ORDER BY order_index, id"
-    );
+    const showAll = req.query.all === "1" && req.user.role === "admin";
+    const sql = showAll
+      ? "SELECT id, name, designation, email, order_index, active, rate FROM members ORDER BY order_index, id"
+      : "SELECT id, name, designation, email, order_index, active, rate FROM members WHERE active = 1 ORDER BY order_index, id";
+    const { rows } = await db.query(sql);
     res.json(rows);
   } catch (err) {
     console.error("Fetch members error:", err);
@@ -19,15 +21,28 @@ router.get("/", authRequired, async (req, res) => {
 
 // POST /api/members — admin only
 router.post("/", authRequired, adminOnly, async (req, res) => {
-  const { name } = req.body || {};
+  const { name, designation, rate, email, active } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: "Name is required" });
+  if (!designation || !designation.trim()) return res.status(400).json({ error: "Designation is required" });
+  const parsedRate = rate !== undefined ? parseFloat(rate) : 0;
+  if (isNaN(parsedRate) || parsedRate < 0) {
+    return res.status(400).json({ error: "Man-Hour Rate must be a non-negative number" });
+  }
 
   try {
     const maxRes = await db.query("SELECT COALESCE(MAX(order_index), -1) as m FROM members");
     const maxOrder = maxRes.rows[0].m;
     const { rows } = await db.query(
-      "INSERT INTO members (name, order_index) VALUES ($1, $2) RETURNING id",
-      [name.trim(), maxOrder + 1]
+      `INSERT INTO members (name, designation, rate, email, active, order_index)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [
+        name.trim(),
+        designation.trim(),
+        parsedRate,
+        email ? email.trim() : "",
+        active === 0 || active === false ? 0 : 1,
+        maxOrder + 1,
+      ]
     );
     res.json({ id: rows[0].id });
   } catch (err) {
@@ -36,13 +51,32 @@ router.post("/", authRequired, adminOnly, async (req, res) => {
   }
 });
 
-// PUT /api/members/:id — rename member (admin only)
+// PUT /api/members/:id — update member (admin only)
 router.put("/:id", authRequired, adminOnly, async (req, res) => {
-  const { name } = req.body || {};
-  if (!name || !name.trim()) return res.status(400).json({ error: "Name is required" });
+  const { name, designation, rate, email, active } = req.body || {};
+  if (name !== undefined && !name.trim()) return res.status(400).json({ error: "Name cannot be empty" });
+  if (designation !== undefined && !designation.trim()) return res.status(400).json({ error: "Designation cannot be empty" });
+  if (rate !== undefined && (isNaN(parseFloat(rate)) || parseFloat(rate) < 0)) {
+    return res.status(400).json({ error: "Man-Hour Rate must be a non-negative number" });
+  }
 
   try {
-    await db.query("UPDATE members SET name = $1 WHERE id = $2", [name.trim(), req.params.id]);
+    const { rows: existingRows } = await db.query("SELECT * FROM members WHERE id = $1", [req.params.id]);
+    const m = existingRows[0];
+    if (!m) return res.status(404).json({ error: "Team member not found" });
+
+    const newName = name !== undefined ? name.trim() : m.name;
+    const newDesignation = designation !== undefined ? designation.trim() : (m.designation || "Team Member");
+    const newRate = rate !== undefined ? parseFloat(rate) : (m.rate || 0);
+    const newEmail = email !== undefined ? email.trim() : (m.email || "");
+    const newActive = active !== undefined ? (active === 0 || active === false ? 0 : 1) : m.active;
+
+    await db.query(
+      `UPDATE members
+       SET name = $1, designation = $2, rate = $3, email = $4, active = $5
+       WHERE id = $6`,
+      [newName, newDesignation, newRate, newEmail, newActive, m.id]
+    );
     res.json({ ok: true });
   } catch (err) {
     console.error("Update member error:", err);

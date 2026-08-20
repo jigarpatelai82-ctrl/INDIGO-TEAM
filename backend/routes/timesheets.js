@@ -1,7 +1,7 @@
 // backend/routes/timesheets.js — Daily & Monthly Timesheet Entry with Project-Wise Hours
 const express = require("express");
 const db = require("../db");
-const { authRequired } = require("../middleware/auth");
+const { authRequired, adminOnly } = require("../middleware/auth");
 const router = express.Router();
 
 const STANDARD_DAY_HOURS = 9;
@@ -9,6 +9,185 @@ const STANDARD_DAY_HOURS = 9;
 function canEditMember(req, memberId) {
   return req.user.role === "admin" || String(req.user.member_id) === String(memberId);
 }
+
+// GET /api/timesheets/admin — Admin overview of team project-wise timesheet hours
+router.get("/admin", authRequired, adminOnly, async (req, res) => {
+  try {
+    const month = req.query.month || new Date().toISOString().slice(0, 7);
+    const memberFilter = req.query.member_id ? parseInt(req.query.member_id, 10) : null;
+    const projectFilter = req.query.project_id ? parseInt(req.query.project_id, 10) : null;
+    const clientFilter = req.query.client_id ? parseInt(req.query.client_id, 10) : null;
+
+    // Fetch members, projects, clients for filter dropdowns
+    const [membersRes, projectsRes, clientsRes, holidaysRes, leavesRes] = await Promise.all([
+      db.query("SELECT id, name, designation, order_index, active, rate FROM members WHERE active = 1 ORDER BY order_index, id"),
+      db.query("SELECT id, project_no, name, abbr, active, client_id FROM projects WHERE active = 1 ORDER BY project_no, id"),
+      db.query("SELECT id, name FROM clients WHERE active = 1 ORDER BY name ASC"),
+      db.query("SELECT * FROM holidays WHERE date LIKE $1 ORDER BY date ASC", [`${month}%`]),
+      db.query("SELECT * FROM leaves WHERE date LIKE $1 ORDER BY date ASC", [`${month}%`]),
+    ]);
+
+    // Fetch all timesheet entries for this month
+    let entriesSql = `
+      SELECT te.id, te.member_id, te.project_id, te.date, te.hours, te.narration, te.task_id,
+             m.name as member_name, m.order_index,
+             p.project_no, p.name as project_name, p.abbr as project_abbr, p.client_id
+      FROM timesheet_entries te
+      JOIN members m ON m.id = te.member_id
+      JOIN projects p ON p.id = te.project_id
+      WHERE te.date LIKE $1
+    `;
+    const entriesParams = [`${month}%`];
+    if (memberFilter) {
+      entriesParams.push(memberFilter);
+      entriesSql += ` AND te.member_id = $${entriesParams.length}`;
+    }
+    if (projectFilter) {
+      entriesParams.push(projectFilter);
+      entriesSql += ` AND te.project_id = $${entriesParams.length}`;
+    }
+    if (clientFilter) {
+      entriesParams.push(clientFilter);
+      entriesSql += ` AND p.client_id = $${entriesParams.length}`;
+    }
+    entriesSql += " ORDER BY m.order_index, m.id, p.project_no, p.id, te.date";
+    const entriesRes = await db.query(entriesSql, entriesParams);
+
+    // Fetch all assigned project_members so rows appear even with 0 logged hours
+    let assignedSql = `
+      SELECT pm.member_id, m.name as member_name, m.order_index,
+             pm.project_id, p.project_no, p.name as project_name, p.abbr as project_abbr, p.client_id
+      FROM project_members pm
+      JOIN members m ON m.id = pm.member_id
+      JOIN projects p ON p.id = pm.project_id
+      WHERE m.active = 1 AND p.active = 1
+    `;
+    const assignedParams = [];
+    if (memberFilter) {
+      assignedParams.push(memberFilter);
+      assignedSql += ` AND pm.member_id = $${assignedParams.length}`;
+    }
+    if (projectFilter) {
+      assignedParams.push(projectFilter);
+      assignedSql += ` AND pm.project_id = $${assignedParams.length}`;
+    }
+    if (clientFilter) {
+      assignedParams.push(clientFilter);
+      assignedSql += ` AND p.client_id = $${assignedParams.length}`;
+    }
+    assignedSql += " ORDER BY m.order_index, m.id, p.project_no, p.id";
+    const assignedRes = await db.query(assignedSql, assignedParams);
+
+    // Build row definitions (unique member + project)
+    const rowMap = new Map();
+    assignedRes.rows.forEach((r) => {
+      const key = `${r.member_id}_${r.project_id}`;
+      rowMap.set(key, {
+        member_id: r.member_id,
+        member_name: r.member_name,
+        order_index: r.order_index,
+        project_id: r.project_id,
+        project_no: r.project_no,
+        project_name: r.project_name,
+        project_abbr: r.project_abbr,
+        daily_hours: {},
+        narrations: {},
+        total_hours: 0,
+      });
+    });
+
+    entriesRes.rows.forEach((e) => {
+      const key = `${e.member_id}_${e.project_id}`;
+      if (!rowMap.has(key)) {
+        rowMap.set(key, {
+          member_id: e.member_id,
+          member_name: e.member_name,
+          order_index: e.order_index,
+          project_id: e.project_id,
+          project_no: e.project_no,
+          project_name: e.project_name,
+          project_abbr: e.project_abbr,
+          daily_hours: {},
+          narrations: {},
+          total_hours: 0,
+        });
+      }
+      const row = rowMap.get(key);
+      const h = parseFloat(e.hours) || 0;
+      row.daily_hours[e.date] = h;
+      if (e.narration) row.narrations[e.date] = e.narration;
+      row.total_hours = Math.round((row.total_hours + h) * 100) / 100;
+    });
+
+    const rows = Array.from(rowMap.values()).sort((a, b) => {
+      if (a.order_index !== b.order_index) return (a.order_index || 0) - (b.order_index || 0);
+      const nameComp = (a.member_name || "").localeCompare(b.member_name || "");
+      if (nameComp !== 0) return nameComp;
+      return (a.project_no || "").localeCompare(b.project_no || "");
+    });
+
+    // Calculate aggregated daily, employee, and project totals
+    const dailyTotals = {};
+    const employeeTotalsMap = new Map();
+    const projectTotalsMap = new Map();
+    let grandTotal = 0;
+
+    rows.forEach((row) => {
+      // Employee totals
+      if (!employeeTotalsMap.has(row.member_id)) {
+        employeeTotalsMap.set(row.member_id, {
+          member_id: row.member_id,
+          member_name: row.member_name,
+          total_hours: 0,
+          project_count: 0,
+        });
+      }
+      const emp = employeeTotalsMap.get(row.member_id);
+      emp.total_hours = Math.round((emp.total_hours + row.total_hours) * 100) / 100;
+      if (row.total_hours > 0) emp.project_count += 1;
+
+      // Project totals
+      if (!projectTotalsMap.has(row.project_id)) {
+        projectTotalsMap.set(row.project_id, {
+          project_id: row.project_id,
+          project_no: row.project_no,
+          project_name: row.project_name,
+          project_abbr: row.project_abbr,
+          total_hours: 0,
+          member_count: 0,
+        });
+      }
+      const prj = projectTotalsMap.get(row.project_id);
+      prj.total_hours = Math.round((prj.total_hours + row.total_hours) * 100) / 100;
+      if (row.total_hours > 0) prj.member_count += 1;
+
+      // Daily totals
+      Object.entries(row.daily_hours).forEach(([d, h]) => {
+        dailyTotals[d] = Math.round(((dailyTotals[d] || 0) + h) * 100) / 100;
+      });
+      grandTotal = Math.round((grandTotal + row.total_hours) * 100) / 100;
+    });
+
+    res.json({
+      month,
+      members: membersRes.rows,
+      projects: projectsRes.rows,
+      clients: clientsRes.rows,
+      holidays: holidaysRes.rows,
+      leaves: leavesRes.rows,
+      rows,
+      summary: {
+        grand_total: grandTotal,
+        daily_totals: dailyTotals,
+        employee_totals: Array.from(employeeTotalsMap.values()),
+        project_totals: Array.from(projectTotalsMap.values()).filter((p) => p.total_hours > 0 || projectFilter),
+      },
+    });
+  } catch (err) {
+    console.error("Admin timesheet fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch admin timesheets" });
+  }
+});
 
 // GET /api/timesheets — fetch month entries and days
 router.get("/", authRequired, async (req, res) => {

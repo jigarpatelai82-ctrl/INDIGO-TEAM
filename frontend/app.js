@@ -48,6 +48,34 @@ function ym(d) {
 function DS(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
+function fmtDateTime(isoStr) {
+  if (!isoStr) return "";
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
+    const day = d.getDate();
+    const month = MN[d.getMonth()]?.slice(0, 3) || "";
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, "0");
+    const mins = String(d.getMinutes()).padStart(2, "0");
+    return `${day} ${month} ${year}, ${hours}:${mins}`;
+  } catch {
+    return isoStr;
+  }
+}
+function fmtDateOnly(dStr) {
+  if (!dStr) return "";
+  try {
+    const d = new Date(dStr + "T00:00:00");
+    if (isNaN(d.getTime())) return dStr;
+    const day = d.getDate();
+    const month = MN[d.getMonth()]?.slice(0, 3) || "";
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  } catch {
+    return dStr;
+  }
+}
 
 // Theme Management (Deep Slate & Cobalt, Light Indigo, Dark Obsidian)
 function setTheme(name) {
@@ -210,6 +238,10 @@ document.addEventListener("click", (e) => {
   if (box && !box.contains(e.target)) {
     document.getElementById("globalSearchResults")?.classList.add("hidden");
   }
+  const clientWrap = document.getElementById("clientSelectWrap");
+  if (clientWrap && !clientWrap.contains(e.target)) {
+    document.getElementById("clientDropdownMenu")?.classList.add("hidden");
+  }
 });
 
 // Authentication
@@ -268,8 +300,11 @@ async function savePassword() {
 // App State
 let view = new Date();
 view.setDate(1);
+let adminTsView = new Date();
+adminTsView.setDate(1);
 let members = [], projects = [], leaves = [], holidays = [], entries = [], days = [], clients = [];
 let tsMonthlyData = { member: null, month: "", projects: [], entries: [], leaves: [], holidays: [], days: [] };
+let adminTsData = { month: "", members: [], projects: [], holidays: [], leaves: [], rows: [], summary: {} };
 let tsCurrentMemberId = null;
 let adminTsViewMode = "timesheet";
 let tsSaveTimer = null;
@@ -385,17 +420,53 @@ async function renderMyDay() {
   const upcoming = myTasks.filter((t) => t.due_date !== todayStr).slice(0, 10);
 
   function taskRow(t) {
-    const isMine = !isAdmin() && String(ME.member_id) === String(t.assigned_to);
+    const overdue = t.due_date && t.status !== "Completed" && new Date(t.due_date) < new Date(new Date().toDateString());
+    const isMine = !isAdmin() && ME && String(ME.member_id) === String(t.assigned_to);
+    const isAwaiting = !t.accepted_at && !t.declined_at;
+    const isAccepted = Boolean(t.accepted_at);
+    const isDeclined = Boolean(t.declined_at);
+
     return `<div class="taskcard prio${t.priority}">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <b>${E(t.title)}</b>
-        <span style="display:flex;gap:6px">${acceptanceBadge(t)}<span class="pill ${impClass[t.importance]}">${t.importance}</span></span>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px;">
+        <div>
+          <b style="font-size:14px;color:var(--text);">${E(t.title)}</b>
+          ${t.description ? `<div class="small" style="margin-top:2px;color:var(--text-muted);">${E(t.description)}</div>` : ""}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+          ${acceptanceBadge(t)}
+          <span class="pill ${impClass[t.importance] || 'impMedium'}">${E(t.importance)}</span>
+        </div>
       </div>
-      <div class="meta">${isAdmin() ? `<span>👤 ${E(t.member_name)}</span>` : ""}${t.project_abbr ? `<span>📁 ${t.project_no ? E(t.project_no) + " · " : ""}${E(t.project_abbr)}</span>` : ""}<span>Priority ${t.priority}</span>${isAdmin() ? `<span>Est: ${t.estimated_hours || 0}h</span>` : ""}${t.due_date ? `<span>Due ${t.due_date}</span>` : ""}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${isMine && !t.accepted_at ? `<button class="primary" onclick="acceptTask(${t.id})">✓ Accept Task</button>` : ""}
-        <select onchange="updateTaskStatus(${t.id}, this.value); renderMyDay()">${["Pending", "In Progress", "Completed", "On Hold"].map((s) => `<option ${s === t.status ? "selected" : ""}>${s}</option>`).join("")}</select>
+      <div class="meta" style="margin:8px 0 12px 0;">
+        ${isAdmin() ? `<span>👤 ${E(t.member_name)}</span>` : ""}
+        ${t.project_abbr ? `<span>📁 ${t.project_no ? E(t.project_no) + " · " : ""}${E(t.project_abbr)}</span>` : ""}
+        <span>Priority ${t.priority}</span>
+        ${isAdmin() ? `<span>Est: ${t.estimated_hours || 0}h</span>` : ""}
+        ${t.due_date ? `<span style="${overdue ? "color:var(--danger);font-weight:bold" : ""}">Due ${fmtDateOnly(t.due_date)}</span>` : ""}
+        ${t.accepted_at ? `<span style="color:var(--success);font-weight:600;">✓ Accepted: ${fmtDateTime(t.accepted_at)}</span>` : ""}
+        ${t.declined_at ? `<span style="color:var(--danger);font-weight:600;">✕ Declined: ${fmtDateTime(t.declined_at)}</span>` : ""}
       </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        ${isMine && isAwaiting ? `
+          <div style="display:inline-flex;gap:8px;align-items:center;">
+            <button class="primary" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})">✓ Accept Task</button>
+            <button class="danger" id="btn-decline-${t.id}" onclick="confirmDeclineTask(${t.id}, '${E(t.title).replace(/'/g, "\\'")}')">Decline</button>
+          </div>
+        ` : ""}
+        ${isMine && isDeclined ? `
+          <span class="small" style="color:var(--danger);font-weight:600;">You declined this task</span>
+          <button class="btn-sm" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})">✓ Re-accept Task</button>
+        ` : ""}
+        ${(isAdmin() || (isMine && isAccepted)) ? `
+          <div style="display:inline-flex;align-items:center;gap:6px;">
+            <span class="small" style="font-weight:600;color:var(--text-muted);">Status:</span>
+            <select onchange="updateTaskStatus(${t.id}, this.value); renderMyDay()">
+              ${["Pending", "In Progress", "Completed", "On Hold"].map((s) => `<option ${s === t.status ? "selected" : ""}>${s}</option>`).join("")}
+            </select>
+          </div>
+        ` : ""}
+      </div>
+      <div id="task-error-${t.id}" class="task-inline-error hidden"></div>
     </div>`;
   }
 
@@ -422,6 +493,7 @@ function buildTabs() {
     { id: "myday", label: "☀️ My Day" },
     { id: "cal", label: "🗓️ Whole Month" },
     { id: "projects", label: "📁 Projects & Budgets" },
+    { id: "admints", label: "🕒 Employee Timesheets" },
     { id: "summary", label: "📊 Monthly Summary" },
     { id: "performance", label: "📈 Employee Performance" },
     { id: "team", label: "👥 Team Management" },
@@ -441,6 +513,7 @@ const TAB_META = {
   myday: ["My Day", "Your tasks and today's timesheet at a glance."],
   cal: ["Whole Month", "Team attendance, leave, and daily project hours for the selected month."],
   projects: ["Projects & Budgets", "Manage projects, team allocation, fees, and manhour budgets."],
+  admints: ["Employee Timesheets", "View and monitor project-wise hours submitted by your team."],
   summary: ["Monthly Summary", "Hours used, remaining budget, and labour cost by project."],
   performance: ["Employee Performance", "Estimated vs. actual hours and efficiency by team member."],
   team: ["Team Management", "Add, rename, reorder, and set man-hour rates for your team."],
@@ -448,7 +521,7 @@ const TAB_META = {
   users: ["Access & Login Management", "Manage user accounts, roles, and login permissions."],
 };
 
-const ADMIN_ONLY_TABS = ["projects", "summary", "performance", "team", "clients", "users"];
+const ADMIN_ONLY_TABS = ["projects", "admints", "summary", "performance", "team", "clients", "users"];
 
 function tab(name) {
   if (!isAdmin() && ADMIN_ONLY_TABS.includes(name)) name = "tasks";
@@ -461,7 +534,7 @@ function tab(name) {
   const ph = document.getElementById("pageHeadTitle"), phs = document.getElementById("pageHeadSubtitle");
   if (ph && meta[name]) { ph.textContent = meta[name][0]; phs.textContent = meta[name][1]; }
   
-  ["myday", "cal", "projects", "summary", "tasks", "performance", "team", "clients", "users"].forEach((t) => {
+  ["myday", "cal", "projects", "admints", "summary", "tasks", "performance", "team", "clients", "users"].forEach((t) => {
     const sec = document.getElementById("tab-" + t);
     if (sec) sec.classList.toggle("hidden", t !== name);
     const btn = document.getElementById("btab-" + t);
@@ -471,6 +544,7 @@ function tab(name) {
   if (name === "myday") renderMyDay();
   if (name === "cal") renderCalendar();
   if (name === "projects") renderProjects();
+  if (name === "admints") renderAdminTimesheets();
   if (name === "summary") renderSummary();
   if (name === "tasks") renderTasks();
   if (name === "performance") renderPerformance();
@@ -911,6 +985,366 @@ function onTsCellKeydown(e, input) {
   }
 }
 
+// Admin Employee Timesheets Module
+async function loadAdminTimesheets() {
+  const m = ym(adminTsView);
+  const empSelect = document.getElementById("adminTsEmpFilter");
+  const projSelect = document.getElementById("adminTsProjFilter");
+  const empVal = empSelect ? empSelect.value : "";
+  const projVal = projSelect ? projSelect.value : "";
+
+  let url = `/timesheets/admin?month=${m}`;
+  if (empVal) url += `&member_id=${encodeURIComponent(empVal)}`;
+  if (projVal) url += `&project_id=${encodeURIComponent(projVal)}`;
+
+  try {
+    adminTsData = await api(url);
+  } catch (err) {
+    console.error("Failed to load admin timesheets:", err);
+  }
+}
+
+async function renderAdminTimesheets() {
+  await loadAdminTimesheets();
+  const y = adminTsView.getFullYear(), m = adminTsView.getMonth();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const today = new Date();
+  const todayStr = DS(today.getFullYear(), today.getMonth(), today.getDate());
+
+  // Update Month Title
+  const monthTitleEl = document.getElementById("adminTsMonthTitle");
+  if (monthTitleEl) monthTitleEl.textContent = `${MN[m]} ${y}`;
+
+  // Populate Filter Dropdowns (preserve selection)
+  const empSelect = document.getElementById("adminTsEmpFilter");
+  if (empSelect) {
+    const curVal = empSelect.value;
+    const memList = adminTsData.members || [];
+    empSelect.innerHTML = `<option value="">All Employees (${memList.length})</option>` +
+      memList.map((mem) => `<option value="${mem.id}" ${String(curVal) === String(mem.id) ? "selected" : ""}>👤 ${E(mem.name)}</option>`).join("");
+  }
+
+  const projSelect = document.getElementById("adminTsProjFilter");
+  if (projSelect) {
+    const curVal = projSelect.value;
+    const projList = adminTsData.projects || [];
+    projSelect.innerHTML = `<option value="">All Projects (${projList.length})</option>` +
+      projList.map((p) => `<option value="${p.id}" ${String(curVal) === String(p.id) ? "selected" : ""}>📁 ${E(p.project_no)} · ${E(p.abbr || p.name)}</option>`).join("");
+  }
+
+  const summary = adminTsData.summary || {};
+  const rows = adminTsData.rows || [];
+  const holMap = Object.fromEntries((adminTsData.holidays || []).map((h) => [h.date, h]));
+  const leaveMap = {};
+  (adminTsData.leaves || []).forEach((l) => {
+    leaveMap[`${l.member_id}_${l.date}`] = l;
+  });
+
+  // Render KPI Cards
+  const kpiEl = document.getElementById("adminTsKpiGrid");
+  if (kpiEl) {
+    const totalHours = summary.grand_total || 0;
+    const activeProjectsCount = (summary.project_totals || []).length;
+    const activeEmpsCount = (summary.employee_totals || []).filter((e) => e.total_hours > 0).length;
+    const totalEmps = adminTsData.members?.length || 0;
+
+    kpiEl.innerHTML = `
+      <div class="adm-ts-kpi-card">
+        <span class="adm-ts-kpi-label">Total Team Hours</span>
+        <span class="adm-ts-kpi-val" style="color:var(--primary);">${fmtHours(totalHours)} hrs</span>
+        <span class="adm-ts-kpi-sub">Across all projects for ${MN[m]} ${y}</span>
+      </div>
+      <div class="adm-ts-kpi-card">
+        <span class="adm-ts-kpi-label">Active Projects</span>
+        <span class="adm-ts-kpi-val">${activeProjectsCount}</span>
+        <span class="adm-ts-kpi-sub">Projects with logged team hours</span>
+      </div>
+      <div class="adm-ts-kpi-card">
+        <span class="adm-ts-kpi-label">Contributing Members</span>
+        <span class="adm-ts-kpi-val">${activeEmpsCount} <span style="font-size:14px;font-weight:500;color:var(--text-muted);">/ ${totalEmps}</span></span>
+        <span class="adm-ts-kpi-sub">Team members with recorded hours</span>
+      </div>
+    `;
+  }
+
+  // Render Employee and Project Breakdown Chips
+  const breakdownEl = document.getElementById("adminTsBreakdowns");
+  if (breakdownEl) {
+    const empTotals = summary.employee_totals || [];
+    const projTotals = summary.project_totals || [];
+
+    let empChips = "";
+    if (empTotals.length) {
+      empChips = empTotals.map((e) => `
+        <button type="button" class="adm-ts-chip" onclick="filterAdminTsByEmployee('${e.member_id}')" title="Filter by ${E(e.member_name)}">
+          <span>👤 ${E(e.member_name)}:</span> <b>${fmtHours(e.total_hours)} hrs</b>
+        </button>
+      `).join("");
+    }
+
+    let projChips = "";
+    if (projTotals.length) {
+      projChips = projTotals.map((p) => `
+        <button type="button" class="adm-ts-chip" onclick="filterAdminTsByProject('${p.project_id}')" title="Filter by ${E(p.project_no)} ${E(p.project_name)}">
+          <span>📁 ${E(p.project_no || p.project_abbr)}:</span> <b>${fmtHours(p.total_hours)} hrs</b>
+        </button>
+      `).join("");
+    }
+
+    breakdownEl.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:12px;margin-bottom:14px;">
+        <div class="adm-ts-breakdown-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="adm-ts-breakdown-title">Employee Monthly Totals</span>
+            ${empSelect?.value ? `<button class="btn-sm" style="font-size:11px;padding:2px 8px;" onclick="filterAdminTsByEmployee('')">Clear Filter</button>` : ""}
+          </div>
+          <div class="adm-ts-chips-list">
+            ${empChips || `<span style="font-size:12px;color:var(--text-muted);">No employee records for this filter</span>`}
+          </div>
+        </div>
+        <div class="adm-ts-breakdown-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="adm-ts-breakdown-title">Project Monthly Totals</span>
+            ${projSelect?.value ? `<button class="btn-sm" style="font-size:11px;padding:2px 8px;" onclick="filterAdminTsByProject('')">Clear Filter</button>` : ""}
+          </div>
+          <div class="adm-ts-chips-list">
+            ${projChips || `<span style="font-size:12px;color:var(--text-muted);">No project records for this filter</span>`}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Render Admin Timesheet Matrix Table
+  const tableEl = document.getElementById("adminTsTable");
+  if (!tableEl) return;
+
+  if (!rows.length) {
+    tableEl.innerHTML = `
+      <tbody>
+        <tr>
+          <td colspan="${daysInMonth + 4}" style="padding:0;border:none;">
+            <div class="ts-empty-card">
+              <div class="ts-empty-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </div>
+              <h4>No Timesheet Entries Found</h4>
+              <p>No project-wise hours match the selected filters for <b>${MN[m]} ${y}</b>. When employees log hours in their timesheet, their records appear here automatically.</p>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    `;
+    return;
+  }
+
+  // Build the complete Table
+  let html = `<thead><tr>`;
+  html += `<th class="adm-col-emp">EMPLOYEE</th>`;
+  html += `<th class="adm-col-prj">PROJECT</th>`;
+  html += `<th class="adm-col-prjno">PROJECT NO.</th>`;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = DS(y, m, d);
+    const dow = new Date(y, m, d).getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const isToday = ds === todayStr;
+    const hol = holMap[ds];
+
+    let thCls = "ts-th-date";
+    if (isToday) thCls += " is-today";
+    if (isWeekend) thCls += " is-weekend";
+    if (hol) thCls += " is-holiday";
+
+    let badge = "";
+    if (hol) {
+      badge = `<span class="ts-date-badge ts-badge-holiday" title="${E(hol.name)}">HOL</span>`;
+    }
+
+    html += `
+      <th class="${thCls}" title="${hol ? E(hol.name) : ds}">
+        <span class="ts-date-num">${d}</span>
+        <span class="ts-date-dow">${DAYN[dow]}</span>
+        ${badge}
+      </th>
+    `;
+  }
+  html += `<th class="ts-col-total">TOTAL</th>`;
+  html += `</tr></thead>`;
+
+  // TBODY
+  html += `<tbody>`;
+  rows.forEach((row) => {
+    html += `<tr>`;
+    html += `
+      <td class="adm-col-emp">
+        <span style="cursor:pointer;" onclick="filterAdminTsByEmployee('${row.member_id}')" title="Filter by ${E(row.member_name)}">
+          ${E(row.member_name)}
+        </span>
+      </td>
+    `;
+    html += `
+      <td class="adm-col-prj">
+        <span style="font-weight:600;color:var(--text);cursor:pointer;" onclick="filterAdminTsByProject('${row.project_id}')" title="Filter by ${E(row.project_name)}">
+          ${E(row.project_name)}
+        </span>
+      </td>
+    `;
+    html += `
+      <td class="adm-col-prjno">
+        <span class="ts-proj-no" style="cursor:pointer;" onclick="filterAdminTsByProject('${row.project_id}')" title="${E(row.project_no)}">
+          ${E(row.project_no || "PRJ-" + row.project_id)}
+        </span>
+      </td>
+    `;
+
+    // Date cells for this employee + project
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = DS(y, m, d);
+      const dow = new Date(y, m, d).getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      const hol = holMap[ds];
+      const lv = leaveMap[`${row.member_id}_${ds}`];
+      const hours = row.daily_hours[ds] || 0;
+      const narration = row.narrations[ds] || "";
+
+      let tdCls = "ts-td-cell";
+      if (isWeekend) tdCls += " is-weekend";
+      if (hol) tdCls += " is-holiday";
+      if (lv && lv.status && lv.status !== "Working-Day") tdCls += " is-leave";
+
+      const hasVal = hours > 0;
+      const cellTitle = `${row.member_name} — ${row.project_name} (${row.project_no})\nDate: ${ds}\nHours: ${fmtHours(hours)}h${narration ? "\nNarration: " + narration : ""}${lv ? "\nLeave Status: " + lv.status : ""}${hol ? "\nHoliday: " + hol.name : ""}`;
+
+      html += `
+        <td class="${tdCls}" style="padding:6px 2px !important;" title="${E(cellTitle)}">
+          <span class="adm-cell-val ${hasVal ? "has-val" : ""}">
+            ${hasVal ? fmtHours(hours) : "-"}
+          </span>
+        </td>
+      `;
+    }
+
+    // Row total
+    html += `
+      <td class="ts-col-total">
+        <span>${fmtHours(row.total_hours)}</span>
+      </td>
+    `;
+    html += `</tr>`;
+  });
+  html += `</tbody>`;
+
+  // TFOOT (Sticky Bottom Daily Total Row)
+  html += `<tfoot><tr class="ts-row-total">`;
+  html += `<td class="adm-col-emp">DAILY TOTAL</td>`;
+  html += `<td class="adm-col-prj"></td>`;
+  html += `<td class="adm-col-prjno"></td>`;
+
+  const dailyTotals = summary.daily_totals || {};
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = DS(y, m, d);
+    const dt = dailyTotals[ds] || 0;
+    const cls = dt > 0 ? "is-over" : "is-zero";
+    html += `
+      <td>
+        <span class="ts-day-total-val ${cls}">
+          ${dt > 0 ? fmtHours(dt) : "-"}
+        </span>
+      </td>
+    `;
+  }
+  html += `
+    <td class="ts-col-total">
+      <div class="ts-month-grand-total">
+        <span class="ts-month-grand-total-label">Grand Total</span>
+        <span class="ts-month-grand-total-val">${fmtHours(summary.grand_total || 0)} hrs</span>
+      </div>
+    </td>
+  `;
+  html += `</tr></tfoot>`;
+
+  tableEl.innerHTML = html;
+}
+
+async function moveAdminTsMonth(delta) {
+  adminTsView.setMonth(adminTsView.getMonth() + delta);
+  await renderAdminTimesheets();
+}
+
+async function todayAdminTsBtn() {
+  adminTsView = new Date();
+  adminTsView.setDate(1);
+  await renderAdminTimesheets();
+}
+
+async function onAdminTsFilterChange() {
+  await renderAdminTimesheets();
+}
+
+async function filterAdminTsByEmployee(empId) {
+  const empSelect = document.getElementById("adminTsEmpFilter");
+  if (empSelect) empSelect.value = empId;
+  await renderAdminTimesheets();
+}
+
+async function filterAdminTsByProject(projId) {
+  const projSelect = document.getElementById("adminTsProjFilter");
+  if (projSelect) projSelect.value = projId;
+  await renderAdminTimesheets();
+}
+
+function exportAdminTsCSV() {
+  const y = adminTsView.getFullYear(), m = adminTsView.getMonth();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const monthStr = ym(adminTsView);
+  const rows = adminTsData.rows || [];
+  const summary = adminTsData.summary || {};
+
+  // Headers
+  const headers = ["Employee", "Project", "Project No"];
+  for (let d = 1; d <= daysInMonth; d++) {
+    headers.push(String(d));
+  }
+  headers.push("Total Hours");
+
+  const csvRows = [headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(",")];
+
+  // Data rows
+  rows.forEach((row) => {
+    const line = [
+      `"${(row.member_name || "").replace(/"/g, '""')}"`,
+      `"${(row.project_name || "").replace(/"/g, '""')}"`,
+      `"${(row.project_no || "").replace(/"/g, '""')}"`,
+    ];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = DS(y, m, d);
+      const h = row.daily_hours[ds] || 0;
+      line.push(h > 0 ? String(h) : "0");
+    }
+    line.push(String(row.total_hours || 0));
+    csvRows.push(line.join(","));
+  });
+
+  // Daily totals row
+  const dailyTotals = summary.daily_totals || {};
+  const totalLine = ['"DAILY TOTAL"', '""', '""'];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = DS(y, m, d);
+    const dt = dailyTotals[ds] || 0;
+    totalLine.push(String(dt));
+  }
+  totalLine.push(String(summary.grand_total || 0));
+  csvRows.push(totalLine.join(","));
+
+  const csvContent = csvRows.join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `employee-timesheets-${monthStr}.csv`;
+  a.click();
+}
+
 // Team Matrix Calendar (for Admin Whole Month Matrix view)
 function renderTeamMatrixCalendar() {
   const y = view.getFullYear(), m = view.getMonth();
@@ -1120,10 +1554,15 @@ function renderProjects() {
   const sorted = sortRows("projects", projects, "project_no");
   const rows = sorted.map((p) => `
     <tr class="${p.status}" ondblclick="openProject(${p.id})">
-      <td>${E(p.project_no)}</td><td>${E(p.abbr)}</td><td>${E(p.name)}</td>
+      <td><b>${E(p.project_no)}</b></td><td>${E(p.abbr)}</td><td>${E(p.name)}</td>
       <td>${p.client_name ? E(p.client_name) : "—"}</td>
       <td>${fmtMoney(p.fee)}</td>
-      <td>${p.members.map((m) => E(m.name)).join(", ") || "—"}</td>
+      <td>
+        <span title="${p.members.map((m) => E(m.name)).join(", ")}">
+          <b>${p.members.length} Member${p.members.length === 1 ? "" : "s"}</b>
+          ${p.members.length > 0 ? `<div class="small" style="font-size:11.5px;color:var(--text-muted);">${p.members.slice(0, 2).map((m) => E(m.name)).join(", ")}${p.members.length > 2 ? ` +${p.members.length - 2} more` : ""}</div>` : ""}
+        </span>
+      </td>
       <td>${p.avg_rate ? fmtMoney(p.avg_rate) + "/hr" : "—"}</td>
       <td>${p.available_hours.toFixed(1)}${p.manual_hours > 0 ? " (manual)" : " (calc)"}</td>
       <td>${p.used_hours.toFixed(1)}</td>
@@ -1132,18 +1571,178 @@ function renderProjects() {
       <td>${isAdmin() ? `<button onclick="openProject(${p.id})">Edit</button>` : ""}</td>
     </tr>`).join("");
   document.getElementById("projectTable").innerHTML = `
-    <tr>${sortTh("projects","project_no","Project No.")}${sortTh("projects","abbr","Abbr.")}${sortTh("projects","name","Project")}${sortTh("projects","client_name","Client")}${sortTh("projects","fee","Fee")}<th>Selected Team</th>${sortTh("projects","avg_rate","Man-hour Rate")}${sortTh("projects","available_hours","Available Hrs")}${sortTh("projects","used_hours","Used Hrs")}${sortTh("projects","usage_pct","Usage %")}<th>Remarks</th><th></th></tr>${rows}`;
+    <tr>${sortTh("projects","project_no","Project No.")}${sortTh("projects","abbr","Abbr.")}${sortTh("projects","name","Project")}${sortTh("projects","client_name","Client")}${sortTh("projects","fee","Fee")}<th>Assigned Team</th>${sortTh("projects","avg_rate","Man-hour Rate")}${sortTh("projects","available_hours","Available Hrs")}${sortTh("projects","used_hours","Used Hrs")}${sortTh("projects","usage_pct","Usage %")}<th>Remarks</th><th></th></tr>${rows}`;
 }
 
 function exportProjects(fmt) {
-  const headers = ["Project No.", "Abbr.", "Project", "Client", "Fee", "Team", "Man-hour Rate", "Available Hrs", "Used Hrs", "Usage %", "Remarks"];
+  const headers = ["Project No.", "Abbr.", "Project", "Client", "Fee", "Assigned Members Count", "Team Members", "Man-hour Rate", "Available Hrs", "Used Hrs", "Usage %", "Remarks"];
   const rows = sortRows("projects", projects, "project_no").map((p) => [
-    p.project_no, p.abbr, p.name, p.client_name || "", p.fee, p.members.map((m) => m.name).join("; "),
+    p.project_no, p.abbr, p.name, p.client_name || "", p.fee, p.members.length, p.members.map((m) => m.name).join("; "),
     p.avg_rate ? p.avg_rate.toFixed(0) : "", p.available_hours.toFixed(1), p.used_hours.toFixed(1),
     p.usage_pct.toFixed(0) + "%", p.remarks || ""
   ]);
   if (fmt === "csv") exportCSV("projects.csv", headers, rows);
   else exportPDF("Projects & Budgets", headers, rows);
+}
+
+// Searchable Client Selector State & Helpers
+let currentProjectClientId = null;
+function renderProjectClientSelector(selectedClientId) {
+  currentProjectClientId = selectedClientId ? Number(selectedClientId) : null;
+  const inputEl = document.getElementById("pclient");
+  if (inputEl) inputEl.value = currentProjectClientId || "";
+
+  const selectedBox = document.getElementById("clientSelectedBox");
+  const selectedName = document.getElementById("clientSelectedName");
+  const searchBox = document.getElementById("clientSearchBox");
+  const searchInput = document.getElementById("clientSearchInput");
+  const dropdownMenu = document.getElementById("clientDropdownMenu");
+
+  if (dropdownMenu) dropdownMenu.classList.add("hidden");
+  if (searchInput) searchInput.value = "";
+
+  if (currentProjectClientId) {
+    const c = clients.find((x) => x.id === currentProjectClientId);
+    if (selectedName) selectedName.textContent = c ? c.name : `Client #${currentProjectClientId}`;
+    if (selectedBox) selectedBox.classList.remove("hidden");
+    if (searchBox) searchBox.classList.add("hidden");
+  } else {
+    if (selectedBox) selectedBox.classList.add("hidden");
+    if (searchBox) searchBox.classList.remove("hidden");
+  }
+}
+
+function openClientDropdown() {
+  const dropdownMenu = document.getElementById("clientDropdownMenu");
+  if (dropdownMenu) {
+    onClientSearchInput(document.getElementById("clientSearchInput")?.value || "");
+    dropdownMenu.classList.remove("hidden");
+  }
+}
+
+function onClientSearchInput(query = "") {
+  const q = (query || "").toLowerCase().trim();
+  const dropdownList = document.getElementById("clientDropdownList");
+  const dropdownMenu = document.getElementById("clientDropdownMenu");
+  if (!dropdownList) return;
+
+  const matched = clients.filter((c) => !q || c.name.toLowerCase().includes(q) || (c.contact_person && c.contact_person.toLowerCase().includes(q)));
+  if (!matched.length) {
+    dropdownList.innerHTML = `<div style="padding:10px 12px;font-size:12px;color:var(--text-muted);">No matching clients found.</div>`;
+  } else {
+    dropdownList.innerHTML = matched.map((c) => `
+      <div class="client-dropdown-item ${c.id === currentProjectClientId ? "is-selected" : ""}" onclick="selectProjectClient(${c.id})">
+        <div>
+          <div class="client-dropdown-item-name">${E(c.name)}</div>
+          ${c.contact_person ? `<div class="client-dropdown-item-sub">👤 ${E(c.contact_person)}</div>` : ""}
+        </div>
+        ${c.id === currentProjectClientId ? `<span style="color:var(--primary);font-weight:700;">✓</span>` : ""}
+      </div>
+    `).join("");
+  }
+  if (dropdownMenu) dropdownMenu.classList.remove("hidden");
+}
+
+function selectProjectClient(clientId) {
+  renderProjectClientSelector(clientId);
+}
+
+function clearProjectClient(e) {
+  if (e) e.stopPropagation();
+  renderProjectClientSelector(null);
+}
+
+// Searchable Multi-Select Team Member Allocation State & Helpers
+let projectSelectedMemberIds = new Set();
+
+function initProjectMemberPicker(initialSelectedIds = []) {
+  projectSelectedMemberIds = new Set(initialSelectedIds.map(Number));
+  const searchInput = document.getElementById("memberSearchInput");
+  if (searchInput) searchInput.value = "";
+  renderProjectMemberPicker("");
+}
+
+function onMemberSearchInput(query = "") {
+  renderProjectMemberPicker(query);
+}
+
+function renderProjectMemberPicker(query = "") {
+  const q = (query || "").toLowerCase().trim();
+  const listEl = document.getElementById("projectMemberList");
+  const selectedWrap = document.getElementById("projectSelectedMembersWrap");
+  const selectedCountEl = document.getElementById("projectSelectedCount");
+  const selectedListEl = document.getElementById("projectSelectedList");
+
+  if (!listEl) return;
+
+  // Filter available active members matching query
+  const matched = members.filter((m) => {
+    if (!q) return true;
+    const nameMatch = (m.name || "").toLowerCase().includes(q);
+    const desigMatch = (m.designation || "").toLowerCase().includes(q);
+    return nameMatch || desigMatch;
+  });
+
+  if (!matched.length) {
+    listEl.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--text-muted);text-align:center;">No team members found matching "${E(q)}".</div>`;
+  } else {
+    listEl.innerHTML = matched.map((m) => {
+      const isChecked = projectSelectedMemberIds.has(m.id);
+      return `
+        <div class="member-multi-item ${isChecked ? "is-checked" : ""}" onclick="toggleProjectMemberSelect(${m.id})">
+          <input type="checkbox" class="member-multi-checkbox" ${isChecked ? "checked" : ""} onclick="event.stopPropagation(); toggleProjectMemberSelect(${m.id})">
+          <div class="member-multi-info">
+            <span class="member-multi-name">${E(m.name)}</span>
+            <span class="member-multi-sub">${E(m.designation || "Team Member")} · ${fmtMoney(m.rate || 0)}/hr</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  // Render Selected Members Cards
+  const selectedList = members.filter((m) => projectSelectedMemberIds.has(m.id));
+  if (selectedCountEl) selectedCountEl.textContent = selectedList.length;
+
+  if (!selectedList.length) {
+    if (selectedWrap) selectedWrap.classList.add("hidden");
+  } else {
+    if (selectedWrap) selectedWrap.classList.remove("hidden");
+    if (selectedListEl) {
+      selectedListEl.innerHTML = selectedList.map((m) => `
+        <div class="member-selected-card">
+          <div>
+            <div class="member-selected-name">👤 ${E(m.name)}</div>
+            <div class="member-selected-meta">${E(m.designation || "Team Member")} · ${fmtMoney(m.rate || 0)}/hr</div>
+          </div>
+          <button type="button" class="member-selected-remove" onclick="removeProjectMemberSelect(${m.id})" title="Remove ${E(m.name)}">✕</button>
+        </div>
+      `).join("");
+    }
+  }
+}
+
+function toggleProjectMemberSelect(memberId) {
+  const id = Number(memberId);
+  if (projectSelectedMemberIds.has(id)) {
+    projectSelectedMemberIds.delete(id);
+  } else {
+    projectSelectedMemberIds.add(id);
+  }
+  const q = document.getElementById("memberSearchInput")?.value || "";
+  renderProjectMemberPicker(q);
+}
+
+function removeProjectMemberSelect(memberId) {
+  projectSelectedMemberIds.delete(Number(memberId));
+  const q = document.getElementById("memberSearchInput")?.value || "";
+  renderProjectMemberPicker(q);
+}
+
+function clearAllSelectedMembers() {
+  projectSelectedMemberIds.clear();
+  const q = document.getElementById("memberSearchInput")?.value || "";
+  renderProjectMemberPicker(q);
 }
 
 function openProject(id) {
@@ -1156,17 +1755,21 @@ function openProject(id) {
   document.getElementById("pmanual").value = p?.manual_hours || "";
   document.getElementById("prem").value = p?.remarks || "";
   document.getElementById("projErr").classList.add("hidden");
-  document.getElementById("pclient").innerHTML = `<option value="">— no client linked —</option>` + clients.map((c) => `<option value="${c.id}">${E(c.name)}</option>`).join("");
-  document.getElementById("pclient").value = p?.client_id || "";
-  const selected = new Set((p?.members || []).map((m) => m.id));
-  document.getElementById("projectMembers").innerHTML = members.map((m) =>
-    `<label><input type="checkbox" value="${m.id}" ${selected.has(m.id) ? "checked" : ""}> ${E(m.name)}</label>`).join("");
+  
+  // Initialize Searchable Client Selector
+  renderProjectClientSelector(p?.client_id || null);
+
+  // Initialize Searchable Multi-Select Team Member Allocation
+  const selectedMemberIds = (p?.members || []).map((m) => m.id);
+  initProjectMemberPicker(selectedMemberIds);
+
   projectDlg.showModal();
 }
 
 async function saveProject() {
   const id = document.getElementById("pi").value;
-  const member_ids = [...document.querySelectorAll("#projectMembers input:checked")].map((x) => +x.value);
+  const member_ids = Array.from(projectSelectedMemberIds);
+  const client_id = document.getElementById("pclient").value || null;
   const body = {
     project_no: document.getElementById("pno").value.trim(),
     abbr: document.getElementById("pabbr").value.trim(),
@@ -1174,7 +1777,7 @@ async function saveProject() {
     fee: +document.getElementById("pfee").value || 0,
     manual_hours: +document.getElementById("pmanual").value || 0,
     remarks: document.getElementById("prem").value,
-    client_id: document.getElementById("pclient").value || null,
+    client_id: client_id ? +client_id : null,
     member_ids,
   };
   const errEl = document.getElementById("projErr");
@@ -1422,46 +2025,168 @@ async function renderTasks() {
   window.__taskCache = await api(url);
   const list = window.__taskCache;
   if (!list.length) {
-    document.getElementById("taskList").innerHTML = `<p class="small">No tasks found.</p>`;
+    document.getElementById("taskList").innerHTML = `<p class="small" style="padding:16px 0;">No tasks found.</p>`;
     return;
   }
   document.getElementById("taskList").innerHTML = list.map((t) => {
     const overdue = t.due_date && t.status !== "Completed" && new Date(t.due_date) < new Date(new Date().toDateString());
     const eff = t.efficiency_pct;
-    const isMine = !isAdmin() && String(ME.member_id) === String(t.assigned_to);
+    const isMine = !isAdmin() && ME && String(ME.member_id) === String(t.assigned_to);
+    const isAwaiting = !t.accepted_at && !t.declined_at;
+    const isAccepted = Boolean(t.accepted_at);
+    const isDeclined = Boolean(t.declined_at);
+
     return `<div class="taskcard prio${t.priority}">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <b>${E(t.title)}</b>
-        <span style="display:flex;gap:6px">${acceptanceBadge(t)}<span class="pill ${impClass[t.importance]}">${t.importance}</span></span>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px;">
+        <div>
+          <b style="font-size:15px;color:var(--text);">${E(t.title)}</b>
+          ${t.description ? `<div class="small" style="margin-top:4px;color:var(--text-muted);">${E(t.description)}</div>` : ""}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+          ${acceptanceBadge(t)}
+          <span class="pill ${impClass[t.importance] || 'impMedium'}">${E(t.importance)}</span>
+        </div>
       </div>
-      ${t.description ? `<div class="small" style="margin:4px 0">${E(t.description)}</div>` : ""}
-      <div class="meta">
+      <div class="meta" style="margin:10px 0 14px 0;">
         <span>👤 ${E(t.member_name)}</span>
         ${t.project_abbr ? `<span>📁 ${t.project_no ? E(t.project_no) + " · " : ""}${E(t.project_abbr)}</span>` : ""}
         <span>Priority ${t.priority}</span>
         ${isAdmin() ? `<span>Est: ${t.estimated_hours || 0}h · Actual: ${t.actual_hours || 0}h${eff !== null ? ` · Efficiency: ${eff.toFixed(0)}%` : ""}</span>` : ""}
-        ${t.due_date ? `<span style="${overdue ? "color:#dc2626;font-weight:bold" : ""}">Due ${t.due_date}${overdue ? " (overdue)" : ""}</span>` : ""}
+        ${t.due_date ? `<span style="${overdue ? "color:var(--danger);font-weight:bold" : ""}">Due ${fmtDateOnly(t.due_date)}${overdue ? " (overdue)" : ""}</span>` : ""}
+        ${t.accepted_at ? `<span style="color:var(--success);font-weight:600;">✓ Accepted: ${fmtDateTime(t.accepted_at)}</span>` : ""}
+        ${t.declined_at ? `<span style="color:var(--danger);font-weight:600;">✕ Declined: ${fmtDateTime(t.declined_at)}</span>` : ""}
       </div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        ${isMine && !t.accepted_at ? `<button class="primary" onclick="acceptTask(${t.id})">✓ Accept Task</button>` : ""}
-        <select onchange="updateTaskStatus(${t.id}, this.value)">
-          ${["Pending", "In Progress", "Completed", "On Hold"].map((s) => `<option ${s === t.status ? "selected" : ""}>${s}</option>`).join("")}
-        </select>
-        ${isAdmin() ? `<button onclick="openTask(${t.id})">Edit</button><button class="danger" onclick="deleteTask(${t.id})">Delete</button>` : ""}
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        ${isMine && isAwaiting ? `
+          <div style="display:inline-flex;gap:8px;align-items:center;">
+            <button class="primary" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})">✓ Accept Task</button>
+            <button class="danger" id="btn-decline-${t.id}" onclick="confirmDeclineTask(${t.id}, '${E(t.title).replace(/'/g, "\\'")}')">Decline</button>
+          </div>
+        ` : ""}
+        ${isMine && isDeclined ? `
+          <span class="small" style="color:var(--danger);font-weight:600;">You declined this task</span>
+          <button class="btn-sm" id="btn-accept-${t.id}" onclick="acceptTask(${t.id})">✓ Re-accept Task</button>
+        ` : ""}
+        ${(isAdmin() || (isMine && isAccepted)) ? `
+          <div style="display:inline-flex;align-items:center;gap:6px;">
+            <span class="small" style="font-weight:600;color:var(--text-muted);">Status:</span>
+            <select onchange="updateTaskStatus(${t.id}, this.value)">
+              ${["Pending", "In Progress", "Completed", "On Hold"].map((s) => `<option ${s === t.status ? "selected" : ""}>${s}</option>`).join("")}
+            </select>
+          </div>
+        ` : ""}
+        ${isAdmin() ? `
+          <button onclick="openTask(${t.id})">Edit</button>
+          <button class="danger" onclick="deleteTask(${t.id})">Delete</button>
+        ` : ""}
       </div>
+      <div id="task-error-${t.id}" class="task-inline-error hidden"></div>
     </div>`;
   }).join("");
 }
 
 function acceptanceBadge(t) {
-  if (t.accepted_at) return `<span class="badge badge-active" title="Accepted ${new Date(t.accepted_at).toLocaleString()}">✓ Accepted</span>`;
-  return `<span class="badge badge-inactive" title="Employee hasn't accepted this task yet">Awaiting Acceptance</span>`;
+  if (t.declined_at || t.acceptance_status === "declined") {
+    return `<span class="badge badge-declined" title="Declined ${t.declined_at ? fmtDateTime(t.declined_at) : ''}"><span class="badge-dot"></span>Declined</span>`;
+  }
+  if (t.accepted_at || t.acceptance_status === "accepted") {
+    return `<span class="badge badge-active" title="Accepted ${t.accepted_at ? fmtDateTime(t.accepted_at) : ''}"><span class="badge-dot"></span>Accepted</span>`;
+  }
+  return `<span class="badge badge-inactive" title="Awaiting employee acceptance"><span class="badge-dot"></span>Awaiting Acceptance</span>`;
 }
 
 async function acceptTask(id) {
-  await api(`/tasks/${id}/accept`, { method: "POST" });
-  if (activeTab === "tasks") renderTasks();
-  if (activeTab === "myday") renderMyDay();
+  const btn = document.getElementById(`btn-accept-${id}`);
+  const declineBtn = document.getElementById(`btn-decline-${id}`);
+  const errEl = document.getElementById(`task-error-${id}`);
+  
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Accepting...";
+  }
+  if (declineBtn) {
+    declineBtn.disabled = true;
+  }
+  if (errEl) {
+    errEl.classList.add("hidden");
+    errEl.textContent = "";
+  }
+
+  try {
+    await api(`/tasks/${id}/accept`, { method: "POST" });
+    if (activeTab === "tasks") await renderTasks();
+    if (activeTab === "myday") await renderMyDay();
+  } catch (err) {
+    console.error("Accept task error:", err);
+    if (errEl) {
+      errEl.textContent = err.message || "Unable to accept this task. Please try again.";
+      errEl.classList.remove("hidden");
+    }
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "✓ Accept Task";
+    }
+    if (declineBtn) {
+      declineBtn.disabled = false;
+    }
+  }
+}
+
+let taskToDeclineId = null;
+function confirmDeclineTask(id, title) {
+  taskToDeclineId = id;
+  const dlg = document.getElementById("declineTaskDlg");
+  const titleEl = document.getElementById("declineTaskTitle");
+  const errEl = document.getElementById("declineTaskErr");
+  const confirmBtn = document.getElementById("btnConfirmDecline");
+  const cancelBtn = document.getElementById("btnCancelDecline");
+
+  if (titleEl) titleEl.textContent = title || `Task #${id}`;
+  if (errEl) {
+    errEl.classList.add("hidden");
+    errEl.textContent = "";
+  }
+  if (confirmBtn) {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = "Decline Task";
+  }
+  if (cancelBtn) cancelBtn.disabled = false;
+
+  if (dlg) dlg.showModal();
+}
+
+async function submitDeclineTask() {
+  if (!taskToDeclineId) return;
+  const id = taskToDeclineId;
+  const confirmBtn = document.getElementById("btnConfirmDecline");
+  const cancelBtn = document.getElementById("btnCancelDecline");
+  const errEl = document.getElementById("declineTaskErr");
+
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "Declining...";
+  }
+  if (cancelBtn) cancelBtn.disabled = true;
+
+  try {
+    await api(`/tasks/${id}/decline`, { method: "POST" });
+    const dlg = document.getElementById("declineTaskDlg");
+    if (dlg) dlg.close();
+    taskToDeclineId = null;
+    if (activeTab === "tasks") await renderTasks();
+    if (activeTab === "myday") await renderMyDay();
+  } catch (err) {
+    console.error("Decline task error:", err);
+    if (errEl) {
+      errEl.textContent = err.message || "Unable to decline this task. Please try again.";
+      errEl.classList.remove("hidden");
+    }
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = "Decline Task";
+    }
+    if (cancelBtn) cancelBtn.disabled = false;
+  }
 }
 
 // Performance (admin)
@@ -1479,53 +2204,97 @@ async function renderPerformance() {
 // Team Management (admin)
 function renderTeam() {
   document.getElementById("teamTable").innerHTML = `
-    <tr><th></th><th>Name</th><th>Man-hour Rate</th><th></th></tr>
+    <tr>
+      <th style="width:36px"></th>
+      <th>Name</th>
+      <th>Designation</th>
+      <th>Man-hour Rate</th>
+      <th>Status</th>
+      <th style="text-align:right">Actions</th>
+    </tr>
     ${members.map((m, i) => `<tr draggable="true" data-id="${m.id}" ondragstart="dragStart(event,${m.id})" ondragover="event.preventDefault()" ondrop="dropOn(event,${m.id})">
-      <td style="cursor:grab;padding-left:12px">☰</td>
-      <td id="mname-${m.id}">${E(m.name)}</td>
-      <td>${m.rate ? fmtMoney(m.rate) + "/hr" : "—"}</td>
-      <td><button onclick="editMemberRate(${m.id})">Edit Rate</button> <button onclick="editMember(${m.id})">Edit Name</button> <button class="danger" onclick="removeMember(${m.id})">Remove</button></td>
+      <td style="cursor:grab;padding-left:12px" title="Drag to reorder">☰</td>
+      <td id="mname-${m.id}">
+        <b>👤 ${E(m.name)}</b>
+        ${m.email ? `<div class="small" style="color:var(--text-muted);font-size:11.5px">${E(m.email)}</div>` : ""}
+      </td>
+      <td><span style="font-weight:600;color:var(--text-secondary);">${E(m.designation || "Team Member")}</span></td>
+      <td><b>${m.rate ? fmtMoney(m.rate) + "/hr" : "—"}</b></td>
+      <td><span class="badge ${m.active ? "badge-active" : "badge-inactive"}"><span class="badge-dot"></span>${m.active ? "Active" : "Inactive"}</span></td>
+      <td style="text-align:right">
+        <div style="display:inline-flex;gap:6px">
+          <button class="btn-sm" onclick="openMemberDlg(${m.id})">✏ Edit</button>
+          <button class="danger btn-sm" onclick="removeMember(${m.id})">Remove</button>
+        </div>
+      </td>
     </tr>`).join("")}`;
 }
 
 function exportTeam(fmt) {
-  const headers = ["Name", "Man-hour Rate"];
-  const rows = members.map((m) => [m.name, m.rate ? m.rate.toFixed(0) : ""]);
+  const headers = ["Name", "Designation", "Man-hour Rate", "Status", "Email"];
+  const rows = members.map((m) => [m.name, m.designation || "Team Member", m.rate ? m.rate.toFixed(0) : "", m.active ? "Active" : "Inactive", m.email || ""]);
   if (fmt === "csv") exportCSV("team.csv", headers, rows);
   else exportPDF("Team Management", headers, rows);
 }
 
-async function editMemberRate(id) {
-  const m = members.find((x) => x.id === id);
-  const val = prompt(`Man-hour rate for ${m.name} (₹ per hour):`, m.rate || "");
-  if (val === null) return;
-  const rate = +val;
-  if (isNaN(rate) || rate < 0) {
-    alert("Enter a valid non-negative number");
+function openMemberDlg(mOrId) {
+  const m = typeof mOrId === "object" && mOrId !== null
+    ? mOrId
+    : mOrId ? members.find((x) => x.id === mOrId) : null;
+
+  document.getElementById("memDlgId").value = m?.id || "";
+  document.getElementById("memDlgName").value = m?.name || "";
+  document.getElementById("memDlgDesignation").value = m?.designation || (m ? "" : "");
+  document.getElementById("memDlgRate").value = m?.rate !== undefined ? m.rate : "";
+  document.getElementById("memDlgActive").value = m?.active !== undefined ? m.active : "1";
+  document.getElementById("memDlgEmail").value = m?.email || "";
+  
+  document.getElementById("memberDlgTitle").textContent = m ? "Edit Team Member" : "Add Team Member";
+  document.getElementById("memDlgErr").classList.add("hidden");
+  memberDlg.showModal();
+}
+
+async function saveMember() {
+  const id = document.getElementById("memDlgId").value;
+  const name = document.getElementById("memDlgName").value.trim();
+  const designation = document.getElementById("memDlgDesignation").value.trim();
+  const rateVal = document.getElementById("memDlgRate").value;
+  const active = parseInt(document.getElementById("memDlgActive").value, 10);
+  const email = document.getElementById("memDlgEmail").value.trim();
+
+  const errEl = document.getElementById("memDlgErr");
+  if (!name) {
+    errEl.textContent = "Team member name is required";
+    errEl.classList.remove("hidden");
     return;
   }
-  await api(`/members/${id}/rate`, { method: "PUT", body: { rate } });
-  await loadMembers();
-  renderTeam();
-}
+  if (!designation) {
+    errEl.textContent = "Designation is required";
+    errEl.classList.remove("hidden");
+    return;
+  }
+  const rate = rateVal === "" ? 0 : Number(rateVal);
+  if (isNaN(rate) || rate < 0) {
+    errEl.textContent = "Man-hour rate must be a valid non-negative number";
+    errEl.classList.remove("hidden");
+    return;
+  }
 
-async function addMember() {
-  const name = document.getElementById("newName").value.trim();
-  if (!name) return;
-  await api("/members", { method: "POST", body: { name } });
-  document.getElementById("newName").value = "";
-  await loadMembers();
-  renderTeam();
-}
-
-async function editMember(id) {
-  const m = members.find((x) => x.id === id);
-  const name = prompt("Edit name (all historical data stays linked to this person):", m.name);
-  if (!name || !name.trim()) return;
-  await api("/members/" + id, { method: "PUT", body: { name: name.trim() } });
-  await loadMembers();
-  renderTeam();
-  renderCalendar();
+  const body = { name, designation, rate, active, email };
+  try {
+    if (id) {
+      await api("/members/" + id, { method: "PUT", body });
+    } else {
+      await api("/members", { method: "POST", body });
+    }
+    memberDlg.close();
+    await loadMembers();
+    renderTeam();
+    renderCalendar();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove("hidden");
+  }
 }
 
 async function removeMember(id) {
@@ -1700,13 +2469,17 @@ Object.assign(window, {
   renderCalendar, renderProjectTimesheet, renderTeamMatrixCalendar,
   onTsCellInput, onTsCellBlur, flushTsSaves, onTsCellKeydown,
   openTime, renderTimeRows, addRow, updateTotal, saveTime,
+  loadAdminTimesheets, renderAdminTimesheets, moveAdminTsMonth, todayAdminTsBtn,
+  onAdminTsFilterChange, filterAdminTsByEmployee, filterAdminTsByProject, exportAdminTsCSV,
   openLeave, saveLeave, openHoliday, saveHoliday, removeHoliday,
   renderProjects, exportProjects, openProject, saveProject,
+  renderProjectClientSelector, openClientDropdown, onClientSearchInput, selectProjectClient, clearProjectClient,
+  initProjectMemberPicker, onMemberSearchInput, renderProjectMemberPicker, toggleProjectMemberSelect, removeProjectMemberSelect, clearAllSelectedMembers,
   renderClients, exportClients, openClient, saveClient, removeClient,
   editRates, saveRates, renderSummary, exportSummary,
   renderTaskToolbar, updateTaskStatus, deleteTask, openTask, saveTask,
-  renderTasks, acceptanceBadge, acceptTask, renderPerformance,
-  renderTeam, exportTeam, editMemberRate, addMember, editMember, removeMember,
+  renderTasks, acceptanceBadge, acceptTask, confirmDeclineTask, submitDeclineTask, renderPerformance,
+  renderTeam, exportTeam, openMemberDlg, saveMember, removeMember,
   dragStart, dropOn, renderUsers, exportUsers, toggleUserMember,
   openUserDlg, saveUser, disableUser, backup
 });
