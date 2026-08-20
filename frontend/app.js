@@ -2435,7 +2435,6 @@ async function renderTasks() {
           </div>
           <div class="project-head-actions">
             ${isAdmin() ? `
-              <button type="button" class="btn-head" onclick="renameProject(${p.id}, '${E(p.name).replace(/'/g, "\\'")}')" title="Rename project">✎ Rename</button>
               <button type="button" class="btn-head plus" onclick="openTaskForProject(${p.id})" title="Add task to ${E(p.abbr || p.name)}">+</button>
             ` : ''}
           </div>
