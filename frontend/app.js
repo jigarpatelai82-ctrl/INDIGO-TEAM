@@ -77,9 +77,9 @@ function fmtDateOnly(dStr) {
   }
 }
 
-// Theme Management (Deep Slate & Cobalt, Light Indigo, Dark Obsidian)
+// Theme Management (Cosmic Aurora, Deep Slate & Cobalt, Light Indigo, Dark Obsidian)
 function setTheme(name) {
-  const valid = ["slate", "light", "dark"].includes(name) ? name : "slate";
+  const valid = ["cosmic", "slate", "light", "dark"].includes(name) ? name : "cosmic";
   document.documentElement.setAttribute("data-theme", valid);
   localStorage.setItem("indigo_theme", valid);
   document.querySelectorAll(".theme-opt").forEach((btn) => {
@@ -87,7 +87,7 @@ function setTheme(name) {
   });
 }
 function initTheme() {
-  const current = localStorage.getItem("indigo_theme") || "slate";
+  const current = localStorage.getItem("indigo_theme") || "cosmic";
   setTheme(current);
 }
 
